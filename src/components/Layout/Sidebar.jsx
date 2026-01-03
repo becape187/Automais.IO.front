@@ -8,6 +8,7 @@ import {
   Shield,
   Settings,
   LogOut,
+  Network,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -16,6 +17,7 @@ const navigation = [
   { name: 'Applications', href: '/applications', icon: Package },
   { name: 'Devices', href: '/devices', icon: Cpu },
   { name: 'Gateways', href: '/gateways', icon: Radio },
+  { name: 'Routers', href: '/routers', icon: Network },
   { name: 'Usuários', href: '/users', icon: Users },
   { name: 'WireGuard VPN', href: '/wireguard', icon: Shield },
 ]
