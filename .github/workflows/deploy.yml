@@ -59,8 +59,12 @@ jobs:
         script: |
           echo "=== Iniciando deploy do frontend ==="
           
-          # Ir para diretório do frontend
-          cd /root/automais.io/front.io
+          # Diretório temporário para extrair
+          TEMP_DIR="/root/automais.io/front.io"
+          DEPLOY_DIR="/var/www/automais.io"
+          
+          # Ir para diretório temporário
+          cd "$TEMP_DIR"
           
           # Fazer backup dos arquivos atuais (opcional)
           if [ -d "dist" ]; then
@@ -77,6 +81,21 @@ jobs:
           
           echo "Verificando arquivos extraídos..."
           ls -la dist/ | head -20
+          
+          # Criar diretório de deploy se não existir
+          mkdir -p "$DEPLOY_DIR"
+          
+          # Copiar arquivos para /var/www/automais.io
+          echo "Copiando arquivos para $DEPLOY_DIR..."
+          cp -r dist/* "$DEPLOY_DIR/"
+          
+          # Ajustar permissões para o nginx conseguir ler
+          echo "Ajustando permissões..."
+          chown -R www-data:www-data "$DEPLOY_DIR"
+          chmod -R 755 "$DEPLOY_DIR"
+          
+          echo "Verificando arquivos em $DEPLOY_DIR..."
+          ls -la "$DEPLOY_DIR/" | head -10
           
           # Recarregar nginx para servir os novos arquivos
           echo "Recarregando nginx..."
