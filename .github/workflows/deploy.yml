@@ -21,17 +21,15 @@ jobs:
 
     - name: Install dependencies
       run: npm ci
-      working-directory: ./front.io
 
     - name: Build
       run: npm run build
-      working-directory: ./front.io
 
     - name: Create deployment package
       run: |
-        cd front.io/dist
-        tar -czf ../../../deploy-front.tar.gz .
-        cd ../../..
+        cd dist
+        tar -czf ../deploy-front.tar.gz .
+        cd ..
 
     - name: Copy files to server
       uses: appleboy/scp-action@master
