@@ -1,46 +1,65 @@
-import { Package, Plus, Search, MoreVertical, Cpu, Activity } from 'lucide-react'
+import { useState } from 'react'
+import { Package, Plus, Search, MoreVertical, Cpu, Activity, Trash2, Edit, AlertCircle } from 'lucide-react'
 import clsx from 'clsx'
+import { useApplications, useDeleteApplication } from '../../hooks/useApplications'
+import ApplicationModal from '../../components/Modal/ApplicationModal'
 
-const applications = [
-  {
-    id: 1,
-    name: 'Monitoramento HVAC',
-    description: 'Sensores de temperatura e umidade em ambientes climatizados',
-    deviceCount: 45,
-    activeDevices: 43,
-    status: 'active',
-    createdAt: '2024-01-15',
-  },
-  {
-    id: 2,
-    name: 'Gestão Energética',
-    description: 'Medidores de consumo elétrico em tempo real',
-    deviceCount: 32,
-    activeDevices: 32,
-    status: 'active',
-    createdAt: '2024-02-03',
-  },
-  {
-    id: 3,
-    name: 'Controle de Estoque',
-    description: 'Monitoramento de condições em armazéns',
-    deviceCount: 28,
-    activeDevices: 27,
-    status: 'active',
-    createdAt: '2024-02-20',
-  },
-  {
-    id: 4,
-    name: 'Logística',
-    description: 'Rastreamento de veículos e cargas',
-    deviceCount: 15,
-    activeDevices: 12,
-    status: 'warning',
-    createdAt: '2024-03-05',
-  },
-]
+const statusLabels = {
+  Active: { label: 'Operacional', color: 'badge-success' },
+  Warning: { label: 'Atenção', color: 'badge-warning' },
+  Archived: { label: 'Arquivado', color: 'badge-gray' },
+}
 
 export default function Applications() {
+  const { data: applications, isLoading, error } = useApplications()
+  const deleteApplication = useDeleteApplication()
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedApplication, setSelectedApplication] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const handleAdd = () => {
+    setSelectedApplication(null)
+    setIsModalOpen(true)
+  }
+
+  const handleEdit = (application) => {
+    setSelectedApplication(application)
+    setIsModalOpen(true)
+  }
+
+  const handleDelete = async (id, name) => {
+    if (window.confirm(`Tem certeza que deseja remover a application "${name}"?`)) {
+      try {
+        await deleteApplication.mutateAsync(id)
+      } catch (error) {
+        alert(error.message || 'Erro ao remover application')
+      }
+    }
+  }
+
+  const filteredApplications = applications?.filter((app) =>
+    app.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    app.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  ) || []
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-600">Carregando applications...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-red-600 flex items-center gap-2">
+          <AlertCircle className="w-5 h-5" />
+          Erro ao carregar applications: {error.message}
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -51,7 +70,7 @@ export default function Applications() {
             Gerencie suas aplicações IoT e devices associados
           </p>
         </div>
-        <button className="btn btn-primary">
+        <button onClick={handleAdd} className="btn btn-primary">
           <Plus className="w-4 h-4" />
           Nova Application
         </button>
@@ -64,6 +83,8 @@ export default function Applications() {
           <input
             type="text"
             placeholder="Buscar applications..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 input"
           />
         </div>
@@ -75,54 +96,91 @@ export default function Applications() {
       </div>
 
       {/* Applications Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {applications.map((app) => (
-          <div key={app.id} className="card p-6 card-hover cursor-pointer">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-start gap-4">
-                <div className="p-3 bg-gradient-purple rounded-xl">
-                  <Package className="w-6 h-6 text-white" />
+      {filteredApplications.length === 0 ? (
+        <div className="card p-12 text-center">
+          <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            Nenhuma application encontrada
+          </h3>
+          <p className="text-gray-600 mb-4">
+            {searchTerm
+              ? 'Tente ajustar sua busca'
+              : 'Comece adicionando sua primeira application'}
+          </p>
+          {!searchTerm && (
+            <button onClick={handleAdd} className="btn btn-primary">
+              <Plus className="w-4 h-4" />
+              Nova Application
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {filteredApplications.map((app) => (
+            <div key={app.id} className="card p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-gradient-purple rounded-xl">
+                    <Package className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {app.name}
+                    </h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {app.description || 'Sem descrição'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {app.name}
-                  </h3>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {app.description}
-                  </p>
+                <div className="flex items-center gap-2">
+                  <span className={clsx(
+                    'badge',
+                    statusLabels[app.status]?.color || 'badge-gray'
+                  )}>
+                    {statusLabels[app.status]?.label || app.status}
+                  </span>
                 </div>
               </div>
-              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                <MoreVertical className="w-5 h-5 text-gray-600" />
-              </button>
-            </div>
 
-            <div className="flex items-center gap-6 pt-4 border-t border-gray-200">
-              <div className="flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-gray-400" />
-                <span className="text-sm text-gray-600">
-                  <span className="font-semibold text-gray-900">{app.deviceCount}</span> devices
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-green-600" />
-                <span className="text-sm text-gray-600">
-                  <span className="font-semibold text-green-600">{app.activeDevices}</span> ativos
-                </span>
-              </div>
-              <div className="ml-auto">
-                <span className={clsx(
-                  'badge',
-                  app.status === 'active' && 'badge-success',
-                  app.status === 'warning' && 'badge-warning'
-                )}>
-                  {app.status === 'active' ? 'Operacional' : 'Atenção'}
-                </span>
+              <div className="flex items-center gap-6 pt-4 border-t border-gray-200">
+                <div className="flex items-center gap-2">
+                  <Cpu className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm text-gray-600">
+                    <span className="font-semibold text-gray-900">{app.deviceCount || 0}</span> devices
+                  </span>
+                </div>
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    onClick={() => handleEdit(app)}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    <Edit className="w-4 h-4" />
+                    Editar
+                  </button>
+                  <button
+                    onClick={() => handleDelete(app.id, app.name)}
+                    className="btn btn-error btn-sm"
+                    disabled={deleteApplication.isPending}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Remover
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {/* Modal */}
+      <ApplicationModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false)
+          setSelectedApplication(null)
+        }}
+        application={selectedApplication}
+      />
     </div>
   )
 }

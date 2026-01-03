@@ -1,62 +1,79 @@
-import { Users as UsersIcon, Plus, Search, Mail, Shield, MoreVertical } from 'lucide-react'
+import { useState } from 'react'
+import { Users as UsersIcon, Plus, Search, Mail, Shield, MoreVertical, Trash2, Edit, AlertCircle } from 'lucide-react'
 import clsx from 'clsx'
-
-const users = [
-  {
-    id: 1,
-    name: 'John Doe',
-    email: 'john.doe@acme.com',
-    role: 'owner',
-    status: 'active',
-    lastLogin: '2 horas atrás',
-    createdAt: '2024-01-10',
-  },
-  {
-    id: 2,
-    name: 'Jane Smith',
-    email: 'jane.smith@acme.com',
-    role: 'admin',
-    status: 'active',
-    lastLogin: '5 minutos atrás',
-    createdAt: '2024-02-15',
-  },
-  {
-    id: 3,
-    name: 'Bob Johnson',
-    email: 'bob.johnson@acme.com',
-    role: 'operator',
-    status: 'active',
-    lastLogin: '1 dia atrás',
-    createdAt: '2024-03-20',
-  },
-  {
-    id: 4,
-    name: 'Alice Williams',
-    email: 'alice.williams@acme.com',
-    role: 'viewer',
-    status: 'active',
-    lastLogin: '3 dias atrás',
-    createdAt: '2024-04-05',
-  },
-  {
-    id: 5,
-    name: 'Charlie Brown',
-    email: 'charlie.brown@acme.com',
-    role: 'operator',
-    status: 'inactive',
-    lastLogin: '30 dias atrás',
-    createdAt: '2024-01-25',
-  },
-]
+import { useUsers, useDeleteUser } from '../../hooks/useUsers'
+import UserModal from '../../components/Modal/UserModal'
 
 const roleLabels = {
-  owner: { label: 'Owner', color: 'badge-primary' },
-  admin: { label: 'Admin', color: 'badge-secondary' },
-  operator: { label: 'Operator', color: 'badge-success' },
-  viewer: { label: 'Viewer', color: 'badge-gray' },
+  Owner: { label: 'Owner', color: 'badge-primary' },
+  Admin: { label: 'Admin', color: 'badge-secondary' },
+  Operator: { label: 'Operator', color: 'badge-success' },
+  Viewer: { label: 'Viewer', color: 'badge-gray' },
+}
+
+const statusLabels = {
+  Invited: { label: 'Convidado', color: 'badge-warning' },
+  Active: { label: 'Ativo', color: 'badge-success' },
+  Suspended: { label: 'Suspenso', color: 'badge-warning' },
+  Disabled: { label: 'Desabilitado', color: 'badge-gray' },
 }
 
 export default function Users() {
+  const { data: users, isLoading, error } = useUsers()
+  const deleteUser = useDeleteUser()
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedUser, setSelectedUser] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+
+  const handleAdd = () => {
+    setSelectedUser(null)
+    setIsModalOpen(true)
+  }
+
+  const handleEdit = (user) => {
+    setSelectedUser(user)
+    setIsModalOpen(true)
+  }
+
+  const handleDelete = async (id, name) => {
+    if (window.confirm(`Tem certeza que deseja remover o usuário "${name}"?`)) {
+      try {
+        await deleteUser.mutateAsync(id)
+      } catch (error) {
+        alert(error.message || 'Erro ao remover usuário')
+      }
+    }
+  }
+
+  const filteredUsers = users?.filter((user) => {
+    const matchesSearch =
+      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesRole = roleFilter === 'all' || user.role === roleFilter
+    const matchesStatus = statusFilter === 'all' || user.status === statusFilter
+    return matchesSearch && matchesRole && matchesStatus
+  }) || []
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-600">Carregando usuários...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-red-600 flex items-center gap-2">
+          <AlertCircle className="w-5 h-5" />
+          Erro ao carregar usuários: {error.message}
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -67,29 +84,37 @@ export default function Users() {
             Gerencie usuários e permissões do tenant
           </p>
         </div>
-        <button className="btn btn-primary">
+        <button onClick={handleAdd} className="btn btn-primary">
           <Plus className="w-4 h-4" />
-          Convidar Usuário
+          Adicionar Usuário
         </button>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="card p-4">
-          <div className="text-2xl font-bold text-gray-900">24</div>
+          <div className="text-2xl font-bold text-gray-900">
+            {users?.length || 0}
+          </div>
           <div className="text-sm text-gray-600 mt-1">Total de Usuários</div>
         </div>
         <div className="card p-4">
-          <div className="text-2xl font-bold text-green-600">22</div>
+          <div className="text-2xl font-bold text-green-600">
+            {users?.filter((u) => u.status === 'Active').length || 0}
+          </div>
           <div className="text-sm text-gray-600 mt-1">Ativos</div>
         </div>
         <div className="card p-4">
-          <div className="text-2xl font-bold text-primary-600">5</div>
+          <div className="text-2xl font-bold text-primary-600">
+            {users?.filter((u) => u.role === 'Admin' || u.role === 'Owner').length || 0}
+          </div>
           <div className="text-sm text-gray-600 mt-1">Admins</div>
         </div>
         <div className="card p-4">
-          <div className="text-2xl font-bold text-yellow-600">2</div>
-          <div className="text-sm text-gray-600 mt-1">Convites Pendentes</div>
+          <div className="text-2xl font-bold text-yellow-600">
+            {users?.filter((u) => u.status === 'Invited').length || 0}
+          </div>
+          <div className="text-sm text-gray-600 mt-1">Convidados</div>
         </div>
       </div>
 
@@ -100,20 +125,32 @@ export default function Users() {
           <input
             type="text"
             placeholder="Buscar usuários..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 input"
           />
         </div>
-        <select className="input w-48">
-          <option>Todas as roles</option>
-          <option>Owner</option>
-          <option>Admin</option>
-          <option>Operator</option>
-          <option>Viewer</option>
+        <select
+          value={roleFilter}
+          onChange={(e) => setRoleFilter(e.target.value)}
+          className="input w-48"
+        >
+          <option value="all">Todas as roles</option>
+          <option value="Owner">Owner</option>
+          <option value="Admin">Admin</option>
+          <option value="Operator">Operator</option>
+          <option value="Viewer">Viewer</option>
         </select>
-        <select className="input w-48">
-          <option>Todos os status</option>
-          <option>Ativos</option>
-          <option>Inativos</option>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="input w-48"
+        >
+          <option value="all">Todos os status</option>
+          <option value="Active">Ativos</option>
+          <option value="Invited">Convidados</option>
+          <option value="Suspended">Suspensos</option>
+          <option value="Disabled">Desabilitados</option>
         </select>
       </div>
 
@@ -144,57 +181,93 @@ export default function Users() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {users.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="py-4 px-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-purple rounded-lg flex items-center justify-center text-white font-semibold">
-                        {user.name.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {user.name}
-                        </div>
-                        <div className="text-sm text-gray-600 flex items-center gap-1">
-                          <Mail className="w-3 h-3" />
-                          {user.email}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-4 px-4">
-                    <span className={clsx('badge', roleLabels[user.role].color)}>
-                      <Shield className="w-3 h-3" />
-                      {roleLabels[user.role].label}
-                    </span>
-                  </td>
-                  <td className="py-4 px-4">
-                    <span className={clsx(
-                      'badge',
-                      user.status === 'active' ? 'badge-success' : 'badge-gray'
-                    )}>
-                      {user.status === 'active' ? 'Ativo' : 'Inativo'}
-                    </span>
-                  </td>
-                  <td className="py-4 px-4">
-                    <span className="text-sm text-gray-700">{user.lastLogin}</span>
-                  </td>
-                  <td className="py-4 px-4">
-                    <span className="text-sm text-gray-700">
-                      {new Date(user.createdAt).toLocaleDateString('pt-BR')}
-                    </span>
-                  </td>
-                  <td className="py-4 px-4">
-                    <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                      <MoreVertical className="w-4 h-4 text-gray-600" />
-                    </button>
+              {filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="py-12 text-center text-gray-500">
+                    Nenhum usuário encontrado
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredUsers.map((user) => (
+                  <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="py-4 px-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-purple rounded-lg flex items-center justify-center text-white font-semibold">
+                          {user.name.split(' ').map(n => n[0]).join('')}
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {user.name}
+                          </div>
+                          <div className="text-sm text-gray-600 flex items-center gap-1">
+                            <Mail className="w-3 h-3" />
+                            {user.email}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <span className={clsx('badge', roleLabels[user.role]?.color || 'badge-gray')}>
+                        <Shield className="w-3 h-3" />
+                        {roleLabels[user.role]?.label || user.role}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4">
+                      <span className={clsx(
+                        'badge',
+                        statusLabels[user.status]?.color || 'badge-gray'
+                      )}>
+                        {statusLabels[user.status]?.label || user.status}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4">
+                      <span className="text-sm text-gray-700">
+                        {user.lastLoginAt
+                          ? new Date(user.lastLoginAt).toLocaleDateString('pt-BR')
+                          : 'Nunca'}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4">
+                      <span className="text-sm text-gray-700">
+                        {new Date(user.createdAt).toLocaleDateString('pt-BR')}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleEdit(user)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                          title="Editar"
+                        >
+                          <Edit className="w-4 h-4 text-gray-600" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(user.id, user.name)}
+                          className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                          disabled={deleteUser.isPending}
+                          title="Remover"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Modal */}
+      <UserModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false)
+          setSelectedUser(null)
+        }}
+        user={selectedUser}
+      />
     </div>
   )
 }

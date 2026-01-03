@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard/Dashboard'
 import Applications from './pages/Applications/Applications'
 import Devices from './pages/Devices/Devices'
 import Gateways from './pages/Gateways/Gateways'
+import Routers from './pages/Routers/Routers'
 import Users from './pages/Users/Users'
 import WireGuard from './pages/WireGuard/WireGuard'
 import Login from './pages/Auth/Login'
@@ -27,6 +28,7 @@ function App() {
           <Route path="applications" element={<Applications />} />
           <Route path="devices" element={<Devices />} />
           <Route path="gateways" element={<Gateways />} />
+          <Route path="routers" element={<Routers />} />
           <Route path="users" element={<Users />} />
           <Route path="wireguard" element={<WireGuard />} />
         </Route>
