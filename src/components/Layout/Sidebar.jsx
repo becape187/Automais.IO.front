@@ -19,7 +19,7 @@ const navigation = [
   { name: 'Gateways', href: '/gateways', icon: Radio },
   { name: 'Routers', href: '/routers', icon: Network },
   { name: 'Usuários', href: '/users', icon: Users },
-  { name: 'WireGuard VPN', href: '/wireguard', icon: Shield },
+  { name: 'VPN', href: '/vpn', icon: Shield },
 ]
 
 export default function Sidebar() {

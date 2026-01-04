@@ -37,8 +37,8 @@ export const routersApi = {
     return response.data
   },
 
-  // Download da configuração WireGuard
-  downloadWireGuardConfig: async (routerId) => {
+  // Download da configuração VPN
+  downloadVpnConfig: async (routerId) => {
     const response = await api.get(`/routers/${routerId}/wireguard/config/download`, {
       responseType: 'blob',
     })

@@ -6,7 +6,7 @@ import Devices from './pages/Devices/Devices'
 import Gateways from './pages/Gateways/Gateways'
 import Routers from './pages/Routers/Routers'
 import Users from './pages/Users/Users'
-import WireGuard from './pages/WireGuard/WireGuard'
+import Vpn from './pages/Vpn/Vpn'
 import Login from './pages/Auth/Login'
 
 function App() {
@@ -30,7 +30,7 @@ function App() {
           <Route path="gateways" element={<Gateways />} />
           <Route path="routers" element={<Routers />} />
           <Route path="users" element={<Users />} />
-          <Route path="wireguard" element={<WireGuard />} />
+          <Route path="vpn" element={<Vpn />} />
         </Route>
       </Routes>
     </BrowserRouter>

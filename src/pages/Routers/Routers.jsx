@@ -41,9 +41,9 @@ export default function Routers() {
 
   const handleDownloadConfig = async (routerId, routerName) => {
     try {
-      await routersApi.downloadWireGuardConfig(routerId)
+      await routersApi.downloadVpnConfig(routerId)
     } catch (error) {
-      alert(error.message || 'Erro ao baixar configuração WireGuard')
+        alert(error.message || 'Erro ao baixar configuração VPN')
     }
   }
 
@@ -211,7 +211,7 @@ export default function Routers() {
                   <button
                     onClick={() => handleDownloadConfig(router.id, router.name)}
                     className="btn btn-secondary btn-sm"
-                    title="Baixar configuração WireGuard"
+                    title="Baixar configuração VPN"
                   >
                     <Download className="w-4 h-4" />
                     Config VPN

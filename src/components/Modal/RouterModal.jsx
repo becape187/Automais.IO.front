@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Modal from './Modal'
 import { useCreateRouter, useUpdateRouter } from '../../hooks/useRouters'
+import { vpnNetworksApi } from '../../services/vpnNetworksApi'
+import { getTenantId } from '../../config/tenant'
 
 export default function RouterModal({ isOpen, onClose, router = null }) {
   const isEditing = !!router
@@ -20,6 +22,31 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
   })
 
   const [errors, setErrors] = useState({})
+  const [vpnNetworks, setVpnNetworks] = useState([])
+  const [loadingVpnNetworks, setLoadingVpnNetworks] = useState(false)
+
+  // Carregar redes VPN quando o modal abrir
+  useEffect(() => {
+    if (isOpen) {
+      loadVpnNetworks()
+    }
+  }, [isOpen])
+
+  const loadVpnNetworks = async () => {
+    try {
+      setLoadingVpnNetworks(true)
+      const tenantId = getTenantId()
+      if (tenantId) {
+        const networks = await vpnNetworksApi.getByTenant(tenantId)
+        setVpnNetworks(networks)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar redes VPN:', error)
+      setVpnNetworks([])
+    } finally {
+      setLoadingVpnNetworks(false)
+    }
+  }
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -190,10 +217,10 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
 
         <div className="border-t border-gray-200 pt-4">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">
-            🔐 Configuração WireGuard (Opcional)
+            🔐 Configuração VPN (Opcional)
           </h3>
           <p className="text-xs text-gray-600 mb-4">
-            Para gerar o certificado WireGuard automaticamente, preencha ambos os campos abaixo.
+            Para gerar o certificado VPN automaticamente, selecione uma rede VPN.
             Se deixar vazio, o router será criado sem VPN.
           </p>
 
@@ -201,17 +228,33 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Rede VPN <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
-              name="vpnNetworkId"
-              value={formData.vpnNetworkId}
-              onChange={handleChange}
-              className="input w-full"
-              placeholder="ID da rede VPN (UUID)"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              ID da rede VPN WireGuard onde o router será conectado. <strong>Obrigatório para gerar certificado.</strong>
-            </p>
+            {loadingVpnNetworks ? (
+              <div className="input w-full text-gray-500">Carregando redes VPN...</div>
+            ) : (
+              <>
+                <select
+                  name="vpnNetworkId"
+                  value={formData.vpnNetworkId}
+                  onChange={handleChange}
+                  className="input w-full"
+                >
+                  <option value="">Selecione uma rede VPN (opcional)</option>
+                  {vpnNetworks.map((network) => (
+                    <option key={network.id} value={network.id}>
+                      {network.name} ({network.cidr}) {network.isDefault && '(Padrão)'}
+                    </option>
+                  ))}
+                </select>
+                {vpnNetworks.length === 0 && (
+                  <p className="mt-1 text-xs text-yellow-600">
+                    ⚠️ Nenhuma rede VPN encontrada. Crie uma rede VPN primeiro na página VPN.
+                  </p>
+                )}
+                <p className="mt-1 text-xs text-gray-500">
+                  Selecione a rede VPN onde o router será conectado. <strong>Obrigatório para gerar certificado.</strong>
+                </p>
+              </>
+            )}
           </div>
 
           <div className="mt-4">
@@ -227,7 +270,7 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
               placeholder="10.0.1.0/24&#10;192.168.100.0/24&#10;172.16.0.0/16"
             />
             <p className="mt-1 text-xs text-gray-500">
-              <strong>Opcional:</strong> Uma rede por linha (formato CIDR). Essas redes serão acessíveis via WireGuard.
+              <strong>Opcional:</strong> Uma rede por linha (formato CIDR). Essas redes serão acessíveis via VPN.
               <br />
               Se deixar vazio, o router terá acesso apenas à própria rede VPN.
               <br />
@@ -238,7 +281,7 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
           {formData.vpnNetworkId && (
             <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
               <p className="text-xs text-green-800">
-                ✅ Certificado WireGuard será gerado automaticamente após criar o router.
+                ✅ Certificado VPN será gerado automaticamente após criar o router.
                 {formData.allowedNetworks && (
                   <> Redes adicionais serão configuradas para roteamento.</>
                 )}
