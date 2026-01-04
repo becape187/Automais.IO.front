@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Radio, Plus, Search, Trash2, Edit, AlertCircle } from 'lucide-react'
+import { Radio, Plus, Search, Trash2, Edit, AlertCircle, Download } from 'lucide-react'
 import { useRouters, useDeleteRouter } from '../../hooks/useRouters'
 import RouterModal from '../../components/Modal/RouterModal'
+import { routersApi } from '../../services/routersApi'
 import clsx from 'clsx'
 
 const statusLabels = {
@@ -35,6 +36,14 @@ export default function Routers() {
       } catch (error) {
         alert(error.message || 'Erro ao remover router')
       }
+    }
+  }
+
+  const handleDownloadConfig = async (routerId, routerName) => {
+    try {
+      await routersApi.downloadWireGuardConfig(routerId)
+    } catch (error) {
+      alert(error.message || 'Erro ao baixar configuração WireGuard')
     }
   }
 
@@ -198,6 +207,16 @@ export default function Routers() {
               </div>
 
               <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-200">
+                {router.vpnNetworkId && (
+                  <button
+                    onClick={() => handleDownloadConfig(router.id, router.name)}
+                    className="btn btn-secondary btn-sm"
+                    title="Baixar configuração WireGuard"
+                  >
+                    <Download className="w-4 h-4" />
+                    Config VPN
+                  </button>
+                )}
                 <button
                   onClick={() => handleEdit(router)}
                   className="btn btn-secondary btn-sm"

@@ -14,6 +14,8 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     routerOsApiUrl: router?.routerOsApiUrl || '',
     routerOsApiUsername: '',
     routerOsApiPassword: '',
+    vpnNetworkId: router?.vpnNetworkId || '',
+    allowedNetworks: router?.allowedNetworks?.join('\n') || '',
     description: router?.description || '',
   })
 
@@ -46,13 +48,24 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     if (!validate()) return
 
     try {
+      // Preparar dados para envio
+      const dataToSend = {
+        ...formData,
+        // Converter allowedNetworks de string (separada por \n) para array
+        allowedNetworks: formData.allowedNetworks
+          ? formData.allowedNetworks.split('\n').map(n => n.trim()).filter(n => n)
+          : undefined,
+        // Converter vpnNetworkId para null se vazio
+        vpnNetworkId: formData.vpnNetworkId || null,
+      }
+
       if (isEditing) {
         await updateRouter.mutateAsync({
           id: router.id,
-          data: formData,
+          data: dataToSend,
         })
       } else {
-        await createRouter.mutateAsync(formData)
+        await createRouter.mutateAsync(dataToSend)
       }
       onClose()
       // Reset form
@@ -63,6 +76,8 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
         routerOsApiUrl: '',
         routerOsApiUsername: '',
         routerOsApiPassword: '',
+        vpnNetworkId: '',
+        allowedNetworks: '',
         description: '',
       })
     } catch (error) {
@@ -170,6 +185,40 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
               placeholder="••••••••"
             />
           </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Rede VPN (Opcional)
+          </label>
+          <input
+            type="text"
+            name="vpnNetworkId"
+            value={formData.vpnNetworkId}
+            onChange={handleChange}
+            className="input w-full"
+            placeholder="ID da rede VPN (UUID) - Deixe vazio se não usar VPN"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            ID da rede VPN WireGuard. Se preenchido, o router será provisionado automaticamente na VPN.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Redes Permitidas (Opcional)
+          </label>
+          <textarea
+            name="allowedNetworks"
+            value={formData.allowedNetworks}
+            onChange={handleChange}
+            className="input w-full font-mono text-sm"
+            rows="3"
+            placeholder="10.0.1.0/24&#10;192.168.100.0/24&#10;172.16.0.0/16"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Uma rede por linha (formato CIDR). Ex: 10.0.1.0/24. Essas redes serão acessíveis via WireGuard.
+          </p>
         </div>
 
         <div>
