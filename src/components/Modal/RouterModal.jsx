@@ -38,6 +38,7 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     if (formData.routerOsApiUrl && !formData.routerOsApiUrl.startsWith('http')) {
       newErrors.routerOsApiUrl = 'URL deve começar com http:// ou https://'
     }
+    
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -187,38 +188,66 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Rede VPN (Opcional)
-          </label>
-          <input
-            type="text"
-            name="vpnNetworkId"
-            value={formData.vpnNetworkId}
-            onChange={handleChange}
-            className="input w-full"
-            placeholder="ID da rede VPN (UUID) - Deixe vazio se não usar VPN"
-          />
-          <p className="mt-1 text-xs text-gray-500">
-            ID da rede VPN WireGuard. Se preenchido, o router será provisionado automaticamente na VPN.
+        <div className="border-t border-gray-200 pt-4">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">
+            🔐 Configuração WireGuard (Opcional)
+          </h3>
+          <p className="text-xs text-gray-600 mb-4">
+            Para gerar o certificado WireGuard automaticamente, preencha ambos os campos abaixo.
+            Se deixar vazio, o router será criado sem VPN.
           </p>
-        </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Redes Permitidas (Opcional)
-          </label>
-          <textarea
-            name="allowedNetworks"
-            value={formData.allowedNetworks}
-            onChange={handleChange}
-            className="input w-full font-mono text-sm"
-            rows="3"
-            placeholder="10.0.1.0/24&#10;192.168.100.0/24&#10;172.16.0.0/16"
-          />
-          <p className="mt-1 text-xs text-gray-500">
-            Uma rede por linha (formato CIDR). Ex: 10.0.1.0/24. Essas redes serão acessíveis via WireGuard.
-          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Rede VPN <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              name="vpnNetworkId"
+              value={formData.vpnNetworkId}
+              onChange={handleChange}
+              className="input w-full"
+              placeholder="ID da rede VPN (UUID)"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              ID da rede VPN WireGuard onde o router será conectado. <strong>Obrigatório para gerar certificado.</strong>
+            </p>
+          </div>
+
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Redes Permitidas (Opcional)
+            </label>
+            <textarea
+              name="allowedNetworks"
+              value={formData.allowedNetworks}
+              onChange={handleChange}
+              className="input w-full font-mono text-sm"
+              rows="3"
+              placeholder="10.0.1.0/24&#10;192.168.100.0/24&#10;172.16.0.0/16"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              <strong>Opcional:</strong> Uma rede por linha (formato CIDR). Essas redes serão acessíveis via WireGuard.
+              <br />
+              Se deixar vazio, o router terá acesso apenas à própria rede VPN.
+              <br />
+              <strong>Exemplo:</strong> 10.0.1.0/24 (uma rede) ou múltiplas redes, uma por linha.
+            </p>
+          </div>
+
+          {formData.vpnNetworkId && (
+            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
+              <p className="text-xs text-green-800">
+                ✅ Certificado WireGuard será gerado automaticamente após criar o router.
+                {formData.allowedNetworks && (
+                  <> Redes adicionais serão configuradas para roteamento.</>
+                )}
+                {!formData.allowedNetworks && (
+                  <> O router terá acesso apenas à rede VPN base.</>
+                )}
+              </p>
+            </div>
+          )}
         </div>
 
         <div>
