@@ -32,6 +32,36 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     }
   }, [isOpen])
 
+  // Atualizar formData quando o router mudar (ao editar)
+  useEffect(() => {
+    if (router) {
+      setFormData({
+        name: router.name || '',
+        serialNumber: router.serialNumber || '',
+        model: router.model || '',
+        routerOsApiUrl: router.routerOsApiUrl || '',
+        routerOsApiUsername: router.routerOsApiUsername || '',
+        routerOsApiPassword: '', // Não preencher senha por segurança
+        vpnNetworkId: router.vpnNetworkId ? String(router.vpnNetworkId) : '',
+        allowedNetworks: router.allowedNetworks?.join('\n') || '',
+        description: router.description || '',
+      })
+    } else {
+      // Limpar formulário quando não há router (criar novo)
+      setFormData({
+        name: '',
+        serialNumber: '',
+        model: '',
+        routerOsApiUrl: '',
+        routerOsApiUsername: '',
+        routerOsApiPassword: '',
+        vpnNetworkId: '',
+        allowedNetworks: '',
+        description: '',
+      })
+    }
+  }, [router])
+
   const loadVpnNetworks = async () => {
     try {
       setLoadingVpnNetworks(true)
@@ -240,7 +270,7 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
                 >
                   <option value="">Selecione uma rede VPN (opcional)</option>
                   {vpnNetworks.map((network) => (
-                    <option key={network.id} value={network.id}>
+                    <option key={network.id} value={String(network.id)}>
                       {network.name} ({network.cidr}) {network.isDefault && '(Padrão)'}
                     </option>
                   ))}
