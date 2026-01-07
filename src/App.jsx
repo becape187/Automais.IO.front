@@ -5,6 +5,7 @@ import Applications from './pages/Applications/Applications'
 import Devices from './pages/Devices/Devices'
 import Gateways from './pages/Gateways/Gateways'
 import Routers from './pages/Routers/Routers'
+import RouterManagement from './pages/Routers/RouterManagement'
 import Users from './pages/Users/Users'
 import Vpn from './pages/Vpn/Vpn'
 import Login from './pages/Auth/Login'
@@ -29,6 +30,7 @@ function App() {
           <Route path="devices" element={<Devices />} />
           <Route path="gateways" element={<Gateways />} />
           <Route path="routers" element={<Routers />} />
+          <Route path="routers/:routerId/management" element={<RouterManagement />} />
           <Route path="users" element={<Users />} />
           <Route path="vpn" element={<Vpn />} />
         </Route>

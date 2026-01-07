@@ -1,15 +1,45 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { routersApi } from '../services/routersApi'
 import { getTenantId } from '../config/tenant'
+import { useSignalR } from './useSignalR'
+import { useCallback } from 'react'
 
 export const useRouters = () => {
   const tenantId = getTenantId()
+  const queryClient = useQueryClient()
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ['routers', tenantId],
     queryFn: () => routersApi.getByTenant(tenantId),
     enabled: !!tenantId,
   })
+
+  // Callback para atualizar dados quando receber notificação SignalR
+  const handleStatusChange = useCallback((data) => {
+    // Atualizar o cache do React Query com os novos dados
+    queryClient.setQueryData(['routers', tenantId], (oldData) => {
+      if (!oldData) return oldData
+
+      return oldData.map((router) => {
+        if (router.id === data.routerId) {
+          return {
+            ...router,
+            status: data.status,
+            lastSeenAt: data.lastSeenAt,
+          }
+        }
+        return router
+      })
+    })
+
+    // Invalidar query individual do router também
+    queryClient.invalidateQueries({ queryKey: ['router', data.routerId] })
+  }, [tenantId, queryClient])
+
+  // Escutar atualizações de status via SignalR
+  useSignalR('RouterStatusChanged', handleStatusChange)
+
+  return query
 }
 
 export const useRouter = (id) => {

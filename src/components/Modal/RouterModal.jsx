@@ -11,8 +11,6 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
 
   const [formData, setFormData] = useState({
     name: router?.name || '',
-    serialNumber: router?.serialNumber || '',
-    model: router?.model || '',
     routerOsApiUrl: router?.routerOsApiUrl || '',
     routerOsApiUsername: '',
     routerOsApiPassword: '',
@@ -37,8 +35,6 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     if (router) {
       setFormData({
         name: router.name || '',
-        serialNumber: router.serialNumber || '',
-        model: router.model || '',
         routerOsApiUrl: router.routerOsApiUrl || '',
         routerOsApiUsername: router.routerOsApiUsername || '',
         routerOsApiPassword: '', // Não preencher senha por segurança
@@ -50,8 +46,6 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
       // Limpar formulário quando não há router (criar novo)
       setFormData({
         name: '',
-        serialNumber: '',
-        model: '',
         routerOsApiUrl: '',
         routerOsApiUsername: '',
         routerOsApiPassword: '',
@@ -129,8 +123,6 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
       // Reset form
       setFormData({
         name: '',
-        serialNumber: '',
-        model: '',
         routerOsApiUrl: '',
         routerOsApiUsername: '',
         routerOsApiPassword: '',
@@ -166,36 +158,6 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
           {errors.name && (
             <p className="mt-1 text-sm text-red-600">{errors.name}</p>
           )}
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Número de Série
-            </label>
-            <input
-              type="text"
-              name="serialNumber"
-              value={formData.serialNumber}
-              onChange={handleChange}
-              className="input w-full"
-              placeholder="Ex: SN123456"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Modelo
-            </label>
-            <input
-              type="text"
-              name="model"
-              value={formData.model}
-              onChange={handleChange}
-              className="input w-full"
-              placeholder="Ex: RB750Gr3"
-            />
-          </div>
         </div>
 
         <div>

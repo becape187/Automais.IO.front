@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { Radio, Plus, Search, Trash2, Edit, AlertCircle, Download } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Radio, Plus, Search, Trash2, Edit, AlertCircle, Download, Wifi, WifiOff, Settings } from 'lucide-react'
 import { useRouters, useDeleteRouter } from '../../hooks/useRouters'
 import RouterModal from '../../components/Modal/RouterModal'
 import { routersApi } from '../../services/routersApi'
+import { useSignalR } from '../../hooks/useSignalR'
 import clsx from 'clsx'
 
 const statusLabels = {
@@ -13,8 +15,12 @@ const statusLabels = {
 }
 
 export default function Routers() {
+  const navigate = useNavigate()
   const { data: routers, isLoading, error } = useRouters()
   const deleteRouter = useDeleteRouter()
+  const { isConnected: isSignalRConnected } = useSignalR('RouterStatusChanged', () => {
+    // Callback vazio - o useRouters já cuida da atualização
+  })
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedRouter, setSelectedRouter] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -75,11 +81,24 @@ export default function Routers() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Routers</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Gerencie seus routers MikroTik
-          </p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Routers</h1>
+            <p className="mt-1 text-sm text-gray-600">
+              Gerencie seus routers MikroTik
+            </p>
+          </div>
+          {/* Indicador de conexão SignalR */}
+          <div className="flex items-center gap-2" title={isSignalRConnected ? 'Atualização em tempo real ativa' : 'Atualização em tempo real desconectada'}>
+            {isSignalRConnected ? (
+              <Wifi className="w-5 h-5 text-green-500" />
+            ) : (
+              <WifiOff className="w-5 h-5 text-gray-400" />
+            )}
+            <span className="text-xs text-gray-500">
+              {isSignalRConnected ? 'Tempo real' : 'Offline'}
+            </span>
+          </div>
         </div>
         <button onClick={handleAdd} className="btn btn-primary">
           <Plus className="w-4 h-4" />
@@ -200,13 +219,27 @@ export default function Routers() {
                   <div className="text-xs text-gray-600 mb-1">Última Atividade</div>
                   <div className="text-sm font-semibold text-gray-900">
                     {router.lastSeenAt
-                      ? new Date(router.lastSeenAt).toLocaleDateString('pt-BR')
+                      ? new Date(router.lastSeenAt).toLocaleString('pt-BR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
                       : 'Nunca'}
                   </div>
                 </div>
               </div>
 
               <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => navigate(`/routers/${router.id}/management`)}
+                  className="btn btn-primary btn-sm"
+                  title="Gerenciar Router"
+                >
+                  <Settings className="w-4 h-4" />
+                  Gerenciar
+                </button>
                 {router.vpnNetworkId && (
                   <button
                     onClick={() => handleDownloadConfig(router.id, router.name)}
