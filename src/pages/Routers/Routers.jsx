@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Radio, Plus, Search, Trash2, Edit, AlertCircle, Download, Wifi, WifiOff, Settings } from 'lucide-react'
+import { Radio, Plus, Search, Trash2, Edit, AlertCircle, Download, Wifi, WifiOff } from 'lucide-react'
 import { useRouters, useDeleteRouter } from '../../hooks/useRouters'
 import RouterModal from '../../components/Modal/RouterModal'
 import { routersApi } from '../../services/routersApi'
@@ -170,7 +170,11 @@ export default function Routers() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {filteredRouters.map((router) => (
-            <div key={router.id} className="card p-6">
+            <div 
+              key={router.id} 
+              className="card p-6 cursor-pointer hover:border-primary-500 hover:border-2 transition-all"
+              onClick={() => navigate(`/routers/${router.id}/management`)}
+            >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-start gap-4">
                   <div className="p-3 bg-primary-100 rounded-xl">
@@ -232,17 +236,12 @@ export default function Routers() {
               </div>
 
               <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => navigate(`/routers/${router.id}/management`)}
-                  className="btn btn-primary btn-sm"
-                  title="Gerenciar Router"
-                >
-                  <Settings className="w-4 h-4" />
-                  Gerenciar
-                </button>
                 {router.vpnNetworkId && (
                   <button
-                    onClick={() => handleDownloadConfig(router.id, router.name)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDownloadConfig(router.id, router.name)
+                    }}
                     className="btn btn-secondary btn-sm"
                     title="Baixar configuração VPN"
                   >
@@ -251,14 +250,20 @@ export default function Routers() {
                   </button>
                 )}
                 <button
-                  onClick={() => handleEdit(router)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleEdit(router)
+                  }}
                   className="btn btn-secondary btn-sm"
                 >
                   <Edit className="w-4 h-4" />
                   Editar
                 </button>
                 <button
-                  onClick={() => handleDelete(router.id, router.name)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleDelete(router.id, router.name)
+                  }}
                   className="btn btn-error btn-sm"
                   disabled={deleteRouter.isPending}
                 >
