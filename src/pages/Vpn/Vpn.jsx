@@ -15,6 +15,7 @@ export default function Vpn() {
     cidr: '',
     description: '',
     dnsServers: '',
+    serverEndpoint: 'automais.io',
     isDefault: false,
   })
   const [searchTerm, setSearchTerm] = useState('')
@@ -46,6 +47,7 @@ export default function Vpn() {
         cidr: network.cidr || '',
         description: network.description || '',
         dnsServers: network.dnsServers || '',
+        serverEndpoint: network.serverEndpoint || 'automais.io',
         isDefault: network.isDefault || false,
       })
     } else {
@@ -55,6 +57,7 @@ export default function Vpn() {
         cidr: '',
         description: '',
         dnsServers: '',
+        serverEndpoint: 'automais.io',
         isDefault: false,
       })
     }
@@ -222,6 +225,12 @@ export default function Vpn() {
                     <span className="text-gray-900">{network.dnsServers}</span>
                   </div>
                 )}
+                {network.serverEndpoint && (
+                  <div>
+                    <span className="text-gray-600">Endpoint:</span>{' '}
+                    <span className="font-mono text-gray-900">{network.serverEndpoint}</span>
+                  </div>
+                )}
                 {network.description && (
                   <div className="text-gray-600 text-xs mt-2">
                     {network.description}
@@ -297,6 +306,23 @@ export default function Vpn() {
             />
             <p className="mt-1 text-xs text-gray-500">
               Separe múltiplos DNS por vírgula
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Endpoint do Servidor VPN
+            </label>
+            <input
+              type="text"
+              value={formData.serverEndpoint}
+              onChange={(e) => setFormData({ ...formData, serverEndpoint: e.target.value })}
+              className="input w-full font-mono"
+              placeholder="automais.io"
+              required
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Endpoint do servidor WireGuard (ex: automais.io). Este valor será usado nos arquivos .conf gerados.
             </p>
           </div>
 
