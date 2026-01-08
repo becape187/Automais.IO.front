@@ -35,5 +35,22 @@ export const usersApi = {
     const response = await api.post(`/users/${id}/networks`, data)
     return response.data
   },
+
+  // Obter rotas disponíveis do tenant
+  getAvailableRoutes: async (tenantId) => {
+    const response = await api.get(`/tenants/${tenantId}/routes`)
+    return response.data
+  },
+
+  // Obter rotas permitidas do usuário
+  getUserRoutes: async (id) => {
+    const response = await api.get(`/users/${id}/routes`)
+    return response.data
+  },
+
+  // Atualizar rotas permitidas do usuário
+  updateUserRoutes: async (id, data) => {
+    await api.put(`/users/${id}/routes`, data)
+  },
 }
 

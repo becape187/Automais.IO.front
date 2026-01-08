@@ -1,6 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Modal from './Modal'
-import { useCreateUser, useUpdateUser } from '../../hooks/useUsers'
+import { 
+  useCreateUser, 
+  useUpdateUser, 
+  useAvailableRoutes, 
+  useUserRoutes, 
+  useUpdateUserRoutes 
+} from '../../hooks/useUsers'
+import { Check, X } from 'lucide-react'
 
 const roleOptions = [
   { value: 'Owner', label: 'Owner' },
@@ -13,20 +20,54 @@ export default function UserModal({ isOpen, onClose, user = null }) {
   const isEditing = !!user
   const createUser = useCreateUser()
   const updateUser = useUpdateUser()
+  const updateUserRoutes = useUpdateUserRoutes()
+  const { data: availableRoutes = [] } = useAvailableRoutes()
+  const { data: userRoutes = [] } = useUserRoutes(user?.id)
 
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
     role: user?.role || 'Viewer',
+    vpnEnabled: user?.vpnEnabled || false,
   })
 
+  const [selectedRoutes, setSelectedRoutes] = useState(new Set())
   const [errors, setErrors] = useState({})
+  const [activeTab, setActiveTab] = useState('basic') // 'basic' ou 'routes'
+
+  // Carregar rotas selecionadas quando abrir modal de edição
+  useEffect(() => {
+    if (isEditing && userRoutes.length > 0) {
+      setSelectedRoutes(new Set(userRoutes.map(r => r.routerAllowedNetworkId)))
+    }
+  }, [isEditing, userRoutes])
 
   const handleChange = (e) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    const { name, value, type, checked } = e.target
+    const newValue = type === 'checkbox' ? checked : value
+    setFormData((prev) => ({ ...prev, [name]: newValue }))
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: null }))
+    }
+  }
+
+  const handleRouteToggle = (routeId) => {
+    setSelectedRoutes((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(routeId)) {
+        newSet.delete(routeId)
+      } else {
+        newSet.add(routeId)
+      }
+      return newSet
+    })
+  }
+
+  const handleSelectAll = () => {
+    if (selectedRoutes.size === availableRoutes.length) {
+      setSelectedRoutes(new Set())
+    } else {
+      setSelectedRoutes(new Set(availableRoutes.map(r => r.routerAllowedNetworkId)))
     }
   }
 
@@ -51,9 +92,18 @@ export default function UserModal({ isOpen, onClose, user = null }) {
 
     try {
       if (isEditing) {
+        // Atualizar dados básicos do usuário
         await updateUser.mutateAsync({
           id: user.id,
           data: formData,
+        })
+        
+        // Atualizar rotas permitidas
+        await updateUserRoutes.mutateAsync({
+          id: user.id,
+          data: {
+            routerAllowedNetworkIds: Array.from(selectedRoutes)
+          }
         })
       } else {
         await createUser.mutateAsync(formData)
@@ -62,20 +112,63 @@ export default function UserModal({ isOpen, onClose, user = null }) {
       setFormData({
         name: '',
         email: '',
-        role: 'viewer',
+        role: 'Viewer',
+        vpnEnabled: false,
       })
+      setSelectedRoutes(new Set())
     } catch (error) {
       console.error('Erro ao salvar usuário:', error)
       alert(error.message || 'Erro ao salvar usuário')
     }
   }
 
+  // Agrupar rotas por router
+  const routesByRouter = availableRoutes.reduce((acc, route) => {
+    if (!acc[route.routerId]) {
+      acc[route.routerId] = {
+        routerName: route.routerName,
+        routes: []
+      }
+    }
+    acc[route.routerId].routes.push(route)
+    return acc
+  }, {})
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title={isEditing ? 'Editar Usuário' : 'Adicionar Usuário'}
+      className="max-w-4xl"
     >
+      {/* Tabs */}
+      {isEditing && (
+        <div className="flex gap-2 mb-4 border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => setActiveTab('basic')}
+            className={`px-4 py-2 font-medium text-sm ${
+              activeTab === 'basic'
+                ? 'text-primary-600 border-b-2 border-primary-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Informações Básicas
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('routes')}
+            className={`px-4 py-2 font-medium text-sm ${
+              activeTab === 'routes'
+                ? 'text-primary-600 border-b-2 border-primary-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Rotas Permitidas ({selectedRoutes.size})
+          </button>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -130,6 +223,92 @@ export default function UserModal({ isOpen, onClose, user = null }) {
             ))}
           </select>
         </div>
+
+        <div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              name="vpnEnabled"
+              checked={formData.vpnEnabled}
+              onChange={handleChange}
+              className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+            />
+            <span className="text-sm font-medium text-gray-700">
+              Habilitar VPN para este usuário
+            </span>
+          </label>
+          <p className="mt-1 text-xs text-gray-500">
+            Permite que o usuário se conecte à VPN e acesse rotas configuradas
+          </p>
+        </div>
+
+        {/* Seção de Rotas (apenas ao editar) */}
+        {isEditing && activeTab === 'routes' && (
+          <div className="space-y-4 border-t border-gray-200 pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Rotas Permitidas</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Selecione quais rotas este usuário pode acessar quando conectado à VPN
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="btn btn-secondary text-sm"
+              >
+                {selectedRoutes.size === availableRoutes.length ? 'Desmarcar Todas' : 'Selecionar Todas'}
+              </button>
+            </div>
+
+            {availableRoutes.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p>Nenhuma rota disponível. Configure rotas nos routers primeiro.</p>
+              </div>
+            ) : (
+              <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
+                {Object.entries(routesByRouter).map(([routerId, { routerName, routes }]) => (
+                  <div key={routerId} className="border-b border-gray-200 last:border-b-0">
+                    <div className="bg-gray-50 px-4 py-2 font-medium text-sm text-gray-700 sticky top-0">
+                      {routerName}
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {routes.map((route) => {
+                        const isSelected = selectedRoutes.has(route.routerAllowedNetworkId)
+                        return (
+                          <label
+                            key={route.routerAllowedNetworkId}
+                            className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleRouteToggle(route.routerAllowedNetworkId)}
+                              className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                            />
+                            <div className="flex-1">
+                              <div className="font-medium text-sm text-gray-900">
+                                {route.networkCidr}
+                              </div>
+                              {route.description && (
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {route.description}
+                                </div>
+                              )}
+                            </div>
+                            {isSelected && (
+                              <Check className="w-5 h-5 text-primary-600" />
+                            )}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
           <button

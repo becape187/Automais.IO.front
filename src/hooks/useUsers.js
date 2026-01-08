@@ -56,3 +56,33 @@ export const useDeleteUser = () => {
   })
 }
 
+export const useAvailableRoutes = () => {
+  const tenantId = getTenantId()
+
+  return useQuery({
+    queryKey: ['availableRoutes', tenantId],
+    queryFn: () => usersApi.getAvailableRoutes(tenantId),
+    enabled: !!tenantId,
+  })
+}
+
+export const useUserRoutes = (userId) => {
+  return useQuery({
+    queryKey: ['userRoutes', userId],
+    queryFn: () => usersApi.getUserRoutes(userId),
+    enabled: !!userId,
+  })
+}
+
+export const useUpdateUserRoutes = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, data }) => usersApi.updateUserRoutes(id, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['userRoutes', variables.id] })
+      queryClient.invalidateQueries({ queryKey: ['user', variables.id] })
+    },
+  })
+}
+

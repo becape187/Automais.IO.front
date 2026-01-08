@@ -16,24 +16,54 @@ export const useRouters = () => {
 
   // Callback para atualizar dados quando receber notificação SignalR
   const handleStatusChange = useCallback((data) => {
+    console.log('📡 RouterStatusChanged recebido:', data)
+    
     // Atualizar o cache do React Query com os novos dados
     queryClient.setQueryData(['routers', tenantId], (oldData) => {
-      if (!oldData) return oldData
+      if (!oldData) {
+        console.warn('⚠️ Dados antigos não encontrados, invalidando query')
+        queryClient.invalidateQueries({ queryKey: ['routers', tenantId] })
+        return oldData
+      }
 
-      return oldData.map((router) => {
-        if (router.id === data.routerId) {
+      const updated = oldData.map((router) => {
+        // Comparar IDs como strings para evitar problemas de tipo
+        const routerIdStr = String(router.id)
+        const dataRouterIdStr = String(data.routerId || data.RouterId)
+        
+        if (routerIdStr === dataRouterIdStr) {
+          console.log(`✅ Atualizando router ${router.name}: ${router.status} → ${data.status || data.Status}`)
           return {
             ...router,
-            status: data.status,
-            lastSeenAt: data.lastSeenAt,
+            status: data.status || data.Status,
+            lastSeenAt: data.lastSeenAt || data.LastSeenAt,
           }
         }
         return router
       })
+      
+      // Verificar se algum router foi atualizado
+      const wasUpdated = updated.some((router, index) => {
+        const oldRouter = oldData[index]
+        return oldRouter && (
+          router.status !== oldRouter.status || 
+          router.lastSeenAt !== oldRouter.lastSeenAt
+        )
+      })
+      
+      if (!wasUpdated) {
+        console.warn('⚠️ Nenhum router foi atualizado. RouterId recebido:', data.routerId || data.RouterId)
+        console.log('Routers disponíveis:', oldData.map(r => ({ id: r.id, name: r.name })))
+      }
+      
+      return updated
     })
 
     // Invalidar query individual do router também
-    queryClient.invalidateQueries({ queryKey: ['router', data.routerId] })
+    const routerId = data.routerId || data.RouterId
+    if (routerId) {
+      queryClient.invalidateQueries({ queryKey: ['router', routerId] })
+    }
   }, [tenantId, queryClient])
 
   // Escutar atualizações de status via SignalR
