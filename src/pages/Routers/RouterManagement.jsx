@@ -38,6 +38,8 @@ export default function RouterManagement() {
   const [executingCommand, setExecutingCommand] = useState(false)
   const [selectedItem, setSelectedItem] = useState(null)
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
+  const [systemInfo, setSystemInfo] = useState(null)
+  const [updatingSystemInfo, setUpdatingSystemInfo] = useState(false)
 
   // Colunas do Winbox para cada tipo
   const WINBOX_COLUMNS = {
@@ -63,11 +65,42 @@ export default function RouterManagement() {
       setError(null)
       const response = await api.get(`/routers/${routerId}/management/status`)
       setConnectionStatus(response.data)
+      
+      // Se conectou, atualizar informações do sistema
+      if (response.data.connected) {
+        setSystemInfo({
+          model: response.data.model,
+          serialNumber: response.data.serialNumber,
+          firmwareVersion: response.data.firmwareVersion,
+          hardwareInfo: response.data.hardwareInfo
+        })
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Erro ao conectar ao router')
       setConnectionStatus({ connected: false })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const refreshSystemInfo = async () => {
+    try {
+      setUpdatingSystemInfo(true)
+      setError(null)
+      const response = await api.post(`/routers/${routerId}/management/system-info/refresh`)
+      
+      if (response.data.router) {
+        setSystemInfo({
+          model: response.data.router.model,
+          serialNumber: response.data.router.serialNumber,
+          firmwareVersion: response.data.router.firmwareVersion,
+          hardwareInfo: response.data.router.hardwareInfo
+        })
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Erro ao atualizar informações do sistema')
+    } finally {
+      setUpdatingSystemInfo(false)
     }
   }
 
@@ -368,6 +401,71 @@ export default function RouterManagement() {
           </button>
         </div>
       </div>
+
+      {/* Informações do Sistema */}
+      {connectionStatus?.connected && (
+        <div className="card p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Informações do Sistema</h2>
+            <button
+              onClick={refreshSystemInfo}
+              className="btn btn-secondary btn-sm"
+              disabled={updatingSystemInfo}
+            >
+              <RefreshCw className={clsx('w-4 h-4 mr-1', updatingSystemInfo && 'animate-spin')} />
+              Atualizar
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-xs font-semibold text-gray-600 uppercase">Modelo</label>
+              <p className="mt-1 text-sm text-gray-900 font-mono">
+                {systemInfo?.model || connectionStatus?.model || '-'}
+              </p>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-600 uppercase">Número de Série</label>
+              <p className="mt-1 text-sm text-gray-900 font-mono">
+                {systemInfo?.serialNumber || connectionStatus?.serialNumber || '-'}
+              </p>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-600 uppercase">Firmware</label>
+              <p className="mt-1 text-sm text-gray-900 font-mono">
+                {systemInfo?.firmwareVersion || connectionStatus?.firmwareVersion || '-'}
+              </p>
+            </div>
+            {systemInfo?.hardwareInfo && (
+              <>
+                {systemInfo.hardwareInfo.cpuLoad && (
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 uppercase">CPU Load</label>
+                    <p className="mt-1 text-sm text-gray-900 font-mono">
+                      {systemInfo.hardwareInfo.cpuLoad}%
+                    </p>
+                  </div>
+                )}
+                {systemInfo.hardwareInfo.memoryUsage && (
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 uppercase">Memória Livre</label>
+                    <p className="mt-1 text-sm text-gray-900 font-mono">
+                      {systemInfo.hardwareInfo.memoryUsage}
+                    </p>
+                  </div>
+                )}
+                {systemInfo.hardwareInfo.uptime && (
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 uppercase">Uptime</label>
+                    <p className="mt-1 text-sm text-gray-900 font-mono">
+                      {systemInfo.hardwareInfo.uptime}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Erro */}
       {error && (
