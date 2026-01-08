@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, 
@@ -11,7 +11,12 @@ import {
   AlertCircle,
   CheckCircle2,
   Edit,
-  X
+  X,
+  Trash2,
+  Power,
+  PowerOff,
+  Play,
+  Square
 } from 'lucide-react'
 import api from '../../services/api'
 import clsx from 'clsx'
@@ -36,10 +41,15 @@ export default function RouterManagement() {
   const [terminalCommand, setTerminalCommand] = useState('')
   const [terminalHistory, setTerminalHistory] = useState([])
   const [executingCommand, setExecutingCommand] = useState(false)
-  const [selectedItem, setSelectedItem] = useState(null)
+  const [selectedItem, setSelectedItem] = useState(null) // Item selecionado (clique simples)
+  const [selectedItemForDetails, setSelectedItemForDetails] = useState(null) // Item para detalhes (duplo clique)
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false)
   const [systemInfo, setSystemInfo] = useState(null)
   const [updatingSystemInfo, setUpdatingSystemInfo] = useState(false)
+  const [dynamicData, setDynamicData] = useState(null)
+  const pollingRef = useRef(false)
+  const pollingIntervalRef = useRef(null)
 
   // Colunas do Winbox para cada tipo
   const WINBOX_COLUMNS = {
@@ -58,6 +68,57 @@ export default function RouterManagement() {
       loadTabData()
     }
   }, [activeTab, connectionStatus])
+
+  // Polling inteligente: atualiza dados dinâmicos a cada 1 segundo (só se não estiver já fazendo requisição)
+  useEffect(() => {
+    if (!connectionStatus?.connected) {
+      // Limpar polling se desconectado
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+      }
+      return
+    }
+
+    // Iniciar polling para dados dinâmicos
+    pollingIntervalRef.current = setInterval(async () => {
+      // Só fazer nova requisição se a anterior já terminou
+      if (pollingRef.current) return
+      
+      pollingRef.current = true
+      try {
+        const response = await api.get(`/routers/${routerId}/management/dynamic-data`)
+        setDynamicData(response.data)
+        
+        // Atualizar systemInfo com dados dinâmicos
+        if (response.data.systemInfo) {
+          setSystemInfo(prev => ({
+            ...prev,
+            hardwareInfo: response.data.systemInfo
+          }))
+        }
+
+        // Se estiver na aba de interfaces, atualizar dados
+        if (activeTab === TABS.INTERFACES && response.data.interfaces) {
+          setData(prev => ({
+            ...prev,
+            interfaces: response.data.interfaces
+          }))
+        }
+      } catch (err) {
+        // Ignorar erros silenciosamente para não poluir a tela
+      } finally {
+        pollingRef.current = false
+      }
+    }, 1000) // 1 segundo
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+      }
+    }
+  }, [connectionStatus?.connected, routerId, activeTab])
 
   const checkConnection = async () => {
     try {
@@ -138,6 +199,82 @@ export default function RouterManagement() {
     }
   }
 
+  const formatTerminalResult = (data) => {
+    // Se for um objeto com 'result', formatar como tabela do Winbox
+    if (data && typeof data === 'object') {
+      // Verificar se tem 'result' (comando de leitura - retorna array)
+      if (data.result && Array.isArray(data.result)) {
+        if (data.result.length === 0) {
+          return ''
+        }
+        
+        // Formatar como tabela do Winbox
+        const items = data.result
+        const allKeys = new Set()
+        items.forEach(item => {
+          Object.keys(item).forEach(key => {
+            if (key !== '.id' && !key.startsWith('=')) {
+              allKeys.add(key)
+            }
+          })
+        })
+
+        const columns = Array.from(allKeys)
+        
+        if (columns.length === 0) {
+          return ''
+        }
+        
+        // Calcular largura das colunas (máximo 25 caracteres)
+        const colWidths = columns.map(col => {
+          const maxLength = Math.max(
+            col.length,
+            ...items.map(item => String(item[col] || '-').length)
+          )
+          return Math.min(maxLength + 1, 25)
+        })
+        
+        // Criar tabela formatada (estilo Winbox)
+        let output = ''
+        
+        // Linha de cabeçalho
+        const header = columns.map((col, idx) => {
+          return col.padEnd(colWidths[idx])
+        }).join(' ')
+        output += header + '\n'
+        output += '-'.repeat(header.length) + '\n'
+        
+        // Linhas de dados
+        items.forEach((item) => {
+          const row = columns.map((col, idx) => {
+            const value = item[col] || '-'
+            const strValue = String(value).substring(0, colWidths[idx] - 1)
+            return strValue.padEnd(colWidths[idx])
+          }).join(' ')
+          output += row + '\n'
+        })
+        
+        return output
+      } 
+      // Verificar se tem 'success' (comando de escrita)
+      else if (data.success !== undefined) {
+        return data.message || ''
+      }
+    }
+    
+    // Se for array direto
+    if (Array.isArray(data)) {
+      if (data.length === 0) {
+        return ''
+      }
+      // Formatar array como tabela
+      return formatTerminalResult({ result: data })
+    }
+    
+    // Fallback: string vazia (não mostrar JSON raw)
+    return ''
+  }
+
   const executeTerminalCommand = async () => {
     if (!terminalCommand.trim() || executingCommand) return
 
@@ -149,10 +286,12 @@ export default function RouterManagement() {
         command: terminalCommand
       })
 
+      const formattedResult = formatTerminalResult(response.data)
+
       setTerminalHistory(prev => [
         ...prev,
         { type: 'command', content: terminalCommand },
-        { type: 'result', content: response.data }
+        { type: 'result', content: formattedResult }
       ])
 
       setTerminalCommand('')
@@ -176,8 +315,126 @@ export default function RouterManagement() {
   }
 
   const handleRowClick = (item) => {
+    // Clique simples: seleciona item para mostrar botões de ação
     setSelectedItem(item)
+  }
+
+  const handleRowDoubleClick = (item) => {
+    // Duplo clique: abre modal de detalhes
+    setSelectedItemForDetails(item)
     setIsConfigModalOpen(true)
+  }
+
+  const canItemBeDisabled = (item) => {
+    // Verificar se o item pode ser desativado (tem campo 'disabled' ou é dinâmico)
+    return item && ('disabled' in item || 'dynamic' in item)
+  }
+
+  const isItemDisabled = (item) => {
+    return item?.disabled === 'true' || item?.disabled === true
+  }
+
+  const getEnableCommand = (tab, itemId) => {
+    switch (tab) {
+      case TABS.FIREWALL:
+        return `/ip/firewall/filter/enable .id=${itemId}`
+      case TABS.NAT:
+        return `/ip/firewall/nat/enable .id=${itemId}`
+      case TABS.ROUTES:
+        return `/ip/route/enable .id=${itemId}`
+      case TABS.INTERFACES:
+        return `/interface/enable .id=${itemId}`
+      default:
+        return ''
+    }
+  }
+
+  const getDisableCommand = (tab, itemId) => {
+    switch (tab) {
+      case TABS.FIREWALL:
+        return `/ip/firewall/filter/disable .id=${itemId}`
+      case TABS.NAT:
+        return `/ip/firewall/nat/disable .id=${itemId}`
+      case TABS.ROUTES:
+        return `/ip/route/disable .id=${itemId}`
+      case TABS.INTERFACES:
+        return `/interface/disable .id=${itemId}`
+      default:
+        return ''
+    }
+  }
+
+  const getDeleteCommand = (tab, itemId) => {
+    switch (tab) {
+      case TABS.FIREWALL:
+        return `/ip/firewall/filter/remove .id=${itemId}`
+      case TABS.NAT:
+        return `/ip/firewall/nat/remove .id=${itemId}`
+      case TABS.ROUTES:
+        return `/ip/route/remove .id=${itemId}`
+      case TABS.INTERFACES:
+        return `/interface/remove .id=${itemId}`
+      default:
+        return ''
+    }
+  }
+
+  const handleEnableItem = async () => {
+    if (!selectedItem || !selectedItem['.id']) return
+    
+    try {
+      setActionLoading(true)
+      const command = getEnableCommand(activeTab, selectedItem['.id'])
+      await api.post(`/routers/${routerId}/management/terminal`, {
+        command: command
+      })
+      setSelectedItem(null)
+      await loadTabData() // Recarregar dados
+    } catch (err) {
+      setError(err.response?.data?.message || 'Erro ao ativar item')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleDisableItem = async () => {
+    if (!selectedItem || !selectedItem['.id']) return
+    
+    try {
+      setActionLoading(true)
+      const command = getDisableCommand(activeTab, selectedItem['.id'])
+      await api.post(`/routers/${routerId}/management/terminal`, {
+        command: command
+      })
+      setSelectedItem(null)
+      await loadTabData() // Recarregar dados
+    } catch (err) {
+      setError(err.response?.data?.message || 'Erro ao desativar item')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleDeleteItem = async () => {
+    if (!selectedItem || !selectedItem['.id']) return
+    
+    if (!window.confirm('Tem certeza que deseja excluir este item?')) {
+      return
+    }
+    
+    try {
+      setActionLoading(true)
+      const command = getDeleteCommand(activeTab, selectedItem['.id'])
+      await api.post(`/routers/${routerId}/management/terminal`, {
+        command: command
+      })
+      setSelectedItem(null)
+      await loadTabData() // Recarregar dados
+    } catch (err) {
+      setError(err.response?.data?.message || 'Erro ao excluir item')
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   const renderTable = (items, type) => {
@@ -263,10 +520,11 @@ export default function RouterManagement() {
                 className={clsx(
                   "border-b border-gray-200 cursor-pointer transition-colors",
                   idx % 2 === 0 ? "bg-white" : "bg-gray-50",
-                  "hover:bg-blue-100"
+                  "hover:bg-blue-100",
+                  selectedItem && selectedItem['.id'] === item['.id'] && "bg-blue-200"
                 )}
                 onClick={() => handleRowClick(item)}
-                onDoubleClick={() => handleRowClick(item)}
+                onDoubleClick={() => handleRowDoubleClick(item)}
               >
                 {columns.map(col => (
                   <td key={col} className={clsx("p-2.5 text-xs border-r border-gray-100 last:border-r-0 font-mono", getValueClassName(item[col], col))}>
@@ -282,7 +540,7 @@ export default function RouterManagement() {
   }
 
   const renderConfigModal = () => {
-    if (!selectedItem) return null
+    if (!selectedItemForDetails) return null
 
     const formatFieldName = (key) => {
       return key
@@ -302,20 +560,20 @@ export default function RouterManagement() {
         isOpen={isConfigModalOpen}
         onClose={() => {
           setIsConfigModalOpen(false)
-          setSelectedItem(null)
+          setSelectedItemForDetails(null)
         }}
         title={`Configuração - ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`}
       >
         <div className="space-y-4">
           <div className="bg-gray-50 p-4 rounded-lg">
-            <p className="text-sm text-gray-600 mb-2">ID: {selectedItem['.id'] || 'N/A'}</p>
+            <p className="text-sm text-gray-600 mb-2">ID: {selectedItemForDetails['.id'] || 'N/A'}</p>
             <p className="text-xs text-gray-500">
               Clique duas vezes em um campo para editar (em desenvolvimento)
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {Object.entries(selectedItem)
+            {Object.entries(selectedItemForDetails)
               .filter(([key]) => key !== '.id' && !key.startsWith('='))
               .map(([key, value]) => (
                 <div key={key} className="border-b border-gray-100 pb-2">
@@ -333,7 +591,7 @@ export default function RouterManagement() {
             <button
               onClick={() => {
                 setIsConfigModalOpen(false)
-                setSelectedItem(null)
+                setSelectedItemForDetails(null)
               }}
               className="btn btn-secondary btn-sm"
             >
@@ -435,29 +693,42 @@ export default function RouterManagement() {
                 {systemInfo?.firmwareVersion || connectionStatus?.firmwareVersion || '-'}
               </p>
             </div>
-            {systemInfo?.hardwareInfo && (
+            {(systemInfo?.hardwareInfo || dynamicData?.systemInfo) && (
               <>
-                {systemInfo.hardwareInfo.cpuLoad && (
+                {(dynamicData?.systemInfo?.cpuLoad || systemInfo?.hardwareInfo?.cpuLoad) && (
                   <div>
                     <label className="text-xs font-semibold text-gray-600 uppercase">CPU Load</label>
                     <p className="mt-1 text-sm text-gray-900 font-mono">
-                      {systemInfo.hardwareInfo.cpuLoad}%
+                      {dynamicData?.systemInfo?.cpuLoad || systemInfo?.hardwareInfo?.cpuLoad}%
                     </p>
                   </div>
                 )}
-                {systemInfo.hardwareInfo.memoryUsage && (
+                {(dynamicData?.systemInfo?.freeMemory || systemInfo?.hardwareInfo?.memoryUsage) && (
                   <div>
-                    <label className="text-xs font-semibold text-gray-600 uppercase">Memória Livre</label>
+                    <label className="text-xs font-semibold text-gray-600 uppercase">Memória</label>
                     <p className="mt-1 text-sm text-gray-900 font-mono">
-                      {systemInfo.hardwareInfo.memoryUsage}
+                      {dynamicData?.systemInfo?.freeMemory || systemInfo?.hardwareInfo?.memoryUsage}
+                      {(dynamicData?.systemInfo?.totalMemory || systemInfo?.hardwareInfo?.totalMemory) && (
+                        <span className="text-gray-500">
+                          {' / ' + (dynamicData?.systemInfo?.totalMemory || systemInfo?.hardwareInfo?.totalMemory)}
+                        </span>
+                      )}
                     </p>
                   </div>
                 )}
-                {systemInfo.hardwareInfo.uptime && (
+                {(dynamicData?.systemInfo?.temperature || systemInfo?.hardwareInfo?.temperature) && (
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 uppercase">Temperatura</label>
+                    <p className="mt-1 text-sm text-gray-900 font-mono">
+                      {dynamicData?.systemInfo?.temperature || systemInfo?.hardwareInfo?.temperature}°C
+                    </p>
+                  </div>
+                )}
+                {(dynamicData?.systemInfo?.uptime || systemInfo?.hardwareInfo?.uptime) && (
                   <div>
                     <label className="text-xs font-semibold text-gray-600 uppercase">Uptime</label>
                     <p className="mt-1 text-sm text-gray-900 font-mono">
-                      {systemInfo.hardwareInfo.uptime}
+                      {dynamicData?.systemInfo?.uptime || systemInfo?.hardwareInfo?.uptime}
                     </p>
                   </div>
                 )}
@@ -531,10 +802,8 @@ export default function RouterManagement() {
                       </div>
                     )}
                     {item.type === 'result' && (
-                      <div className="text-green-400 whitespace-pre-wrap">
-                        {typeof item.content === 'object' 
-                          ? JSON.stringify(item.content, null, 2)
-                          : item.content}
+                      <div className="text-green-400 whitespace-pre font-mono text-xs">
+                        {item.content}
                       </div>
                     )}
                     {item.type === 'error' && (
@@ -571,11 +840,64 @@ export default function RouterManagement() {
           </div>
         ) : (
           <div>
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-700">
-                💡 <strong>Dica:</strong> Clique em uma linha para ver os detalhes da configuração
-              </p>
-            </div>
+            {/* Barra de ações (botões acima da tabela, estilo Winbox) */}
+            {selectedItem && (activeTab === TABS.FIREWALL || activeTab === TABS.NAT || activeTab === TABS.ROUTES || activeTab === TABS.INTERFACES) && (
+              <div className="mb-4 p-3 bg-gray-100 border border-gray-300 rounded-lg flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-700">
+                    Item selecionado: {selectedItem['.id'] || 'N/A'}
+                  </span>
+                  {selectedItem.name && (
+                    <span className="text-sm text-gray-600">
+                      ({selectedItem.name})
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {canItemBeDisabled(selectedItem) && (
+                    <>
+                      {isItemDisabled(selectedItem) ? (
+                        <button
+                          onClick={handleEnableItem}
+                          disabled={actionLoading}
+                          className="btn btn-success btn-sm"
+                          title="Ativar item"
+                        >
+                          <Play className="w-4 h-4 mr-1" />
+                          Ativar
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleDisableItem}
+                          disabled={actionLoading}
+                          className="btn btn-warning btn-sm"
+                          title="Desativar item"
+                        >
+                          <Square className="w-4 h-4 mr-1" />
+                          Desativar
+                        </button>
+                      )}
+                    </>
+                  )}
+                  <button
+                    onClick={handleDeleteItem}
+                    disabled={actionLoading}
+                    className="btn btn-error btn-sm"
+                    title="Excluir item"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Excluir
+                  </button>
+                  <button
+                    onClick={() => setSelectedItem(null)}
+                    className="btn btn-secondary btn-sm"
+                    title="Desselecionar"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
             {activeTab === TABS.FIREWALL && renderTable(data.rules, 'firewall')}
             {activeTab === TABS.NAT && renderTable(data.rules, 'nat')}
             {activeTab === TABS.ROUTES && renderTable(data.routes, 'routes')}
