@@ -17,7 +17,7 @@ const statusLabels = {
 
 export default function Routers() {
   const navigate = useNavigate()
-  const { data: routers, isLoading, error, refetch } = useRouters()
+  const { data: routers, isLoading, error, refetch, isFetching } = useRouters()
   const deleteRouter = useDeleteRouter()
   const { isConnected: isSignalRConnected } = useSignalR('RouterStatusChanged', () => {
     // Callback vazio - o useRouters já cuida da atualização
@@ -107,16 +107,24 @@ export default function Routers() {
               Gerencie seus routers MikroTik
             </p>
           </div>
-          {/* Indicador de conexão SignalR */}
-          <div className="flex items-center gap-2" title={isSignalRConnected ? 'Atualização em tempo real ativa' : 'Atualização em tempo real desconectada'}>
-            {isSignalRConnected ? (
-              <Wifi className="w-5 h-5 text-green-500" />
-            ) : (
-              <WifiOff className="w-5 h-5 text-gray-400" />
+          {/* Indicador de conexão SignalR e atualização */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2" title={isSignalRConnected ? 'Atualização em tempo real ativa' : 'Atualização em tempo real desconectada'}>
+              {isSignalRConnected ? (
+                <Wifi className="w-5 h-5 text-green-500" />
+              ) : (
+                <WifiOff className="w-5 h-5 text-gray-400" />
+              )}
+              <span className="text-xs text-gray-500">
+                {isSignalRConnected ? 'Tempo real' : 'Offline'}
+              </span>
+            </div>
+            {isFetching && (
+              <div className="flex items-center gap-2 text-xs text-blue-500">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                <span>Atualizando...</span>
+              </div>
             )}
-            <span className="text-xs text-gray-500">
-              {isSignalRConnected ? 'Tempo real' : 'Offline'}
-            </span>
           </div>
         </div>
         <button onClick={handleAdd} className="btn btn-primary">

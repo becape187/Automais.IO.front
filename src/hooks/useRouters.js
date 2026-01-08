@@ -10,8 +10,21 @@ export const useRouters = () => {
 
   const query = useQuery({
     queryKey: ['routers', tenantId],
-    queryFn: () => routersApi.getByTenant(tenantId),
+    queryFn: async () => {
+      console.log('🔄 Refetching routers...')
+      const data = await routersApi.getByTenant(tenantId)
+      console.log('✅ Routers atualizados do servidor:', data.length, 'routers')
+      return data
+    },
     enabled: !!tenantId,
+    // Atualizar automaticamente a cada 10 segundos
+    refetchInterval: 10000, // 10 segundos
+    // Manter dados em cache enquanto atualiza em background
+    refetchIntervalInBackground: true,
+    // Não parar de atualizar quando a janela está em foco
+    refetchOnWindowFocus: true,
+    // Sempre mostrar dados atualizados, mesmo durante refetch
+    keepPreviousData: false,
   })
 
   // Callback para atualizar dados quando receber notificação SignalR
@@ -32,12 +45,24 @@ export const useRouters = () => {
         const dataRouterIdStr = String(data.routerId || data.RouterId)
         
         if (routerIdStr === dataRouterIdStr) {
-          console.log(`✅ Atualizando router ${router.name}: ${router.status} → ${data.status || data.Status}`)
+          const newStatus = data.status || data.Status
+          const newLastSeenAt = data.lastSeenAt || data.LastSeenAt
+          const newLatency = data.latency !== undefined ? data.latency : (data.Latency !== undefined ? data.Latency : router.latency)
+          
+          console.log(`✅ Atualizando router ${router.name}: ${router.status} → ${newStatus}, Latency: ${newLatency}ms`)
+          
+          // Sempre criar novo objeto para garantir que React detecte a mudança
           return {
             ...router,
-            status: data.status || data.Status,
-            lastSeenAt: data.lastSeenAt || data.LastSeenAt,
-            latency: data.latency !== undefined ? data.latency : (data.Latency !== undefined ? data.Latency : router.latency),
+            status: newStatus,
+            lastSeenAt: newLastSeenAt,
+            latency: newLatency,
+            // Atualizar outros campos se vierem no SignalR
+            ...(data.hardwareInfo && { hardwareInfo: data.hardwareInfo }),
+            ...(data.model && { model: data.model }),
+            ...(data.firmwareVersion && { firmwareVersion: data.firmwareVersion }),
+            // Adicionar timestamp para forçar atualização visual
+            _updatedAt: Date.now(),
           }
         }
         return router
@@ -48,7 +73,8 @@ export const useRouters = () => {
         const oldRouter = oldData[index]
         return oldRouter && (
           router.status !== oldRouter.status || 
-          router.lastSeenAt !== oldRouter.lastSeenAt
+          router.lastSeenAt !== oldRouter.lastSeenAt ||
+          router.latency !== oldRouter.latency
         )
       })
       
