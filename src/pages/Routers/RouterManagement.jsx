@@ -47,9 +47,6 @@ export default function RouterManagement() {
   const [actionLoading, setActionLoading] = useState(false)
   const [systemInfo, setSystemInfo] = useState(null)
   const [updatingSystemInfo, setUpdatingSystemInfo] = useState(false)
-  const [dynamicData, setDynamicData] = useState(null)
-  const pollingRef = useRef(false)
-  const pollingIntervalRef = useRef(null)
 
   // Colunas do Winbox para cada tipo
   const WINBOX_COLUMNS = {
@@ -69,56 +66,6 @@ export default function RouterManagement() {
     }
   }, [activeTab, connectionStatus])
 
-  // Polling inteligente: atualiza dados dinâmicos a cada 1 segundo (só se não estiver já fazendo requisição)
-  useEffect(() => {
-    if (!connectionStatus?.connected) {
-      // Limpar polling se desconectado
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current)
-        pollingIntervalRef.current = null
-      }
-      return
-    }
-
-    // Iniciar polling para dados dinâmicos
-    pollingIntervalRef.current = setInterval(async () => {
-      // Só fazer nova requisição se a anterior já terminou
-      if (pollingRef.current) return
-      
-      pollingRef.current = true
-      try {
-        const response = await api.get(`/routers/${routerId}/management/dynamic-data`)
-        setDynamicData(response.data)
-        
-        // Atualizar systemInfo com dados dinâmicos
-        if (response.data.systemInfo) {
-          setSystemInfo(prev => ({
-            ...prev,
-            hardwareInfo: response.data.systemInfo
-          }))
-        }
-
-        // Se estiver na aba de interfaces, atualizar dados
-        if (activeTab === TABS.INTERFACES && response.data.interfaces) {
-          setData(prev => ({
-            ...prev,
-            interfaces: response.data.interfaces
-          }))
-        }
-      } catch (err) {
-        // Ignorar erros silenciosamente para não poluir a tela
-      } finally {
-        pollingRef.current = false
-      }
-    }, 1000) // 1 segundo
-
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current)
-        pollingIntervalRef.current = null
-      }
-    }
-  }, [connectionStatus?.connected, routerId, activeTab])
 
   const checkConnection = async () => {
     try {
@@ -693,47 +640,52 @@ export default function RouterManagement() {
                 {systemInfo?.firmwareVersion || connectionStatus?.firmwareVersion || '-'}
               </p>
             </div>
-            {(systemInfo?.hardwareInfo || dynamicData?.systemInfo) && (
-              <>
-                {(dynamicData?.systemInfo?.cpuLoad || systemInfo?.hardwareInfo?.cpuLoad) && (
-                  <div>
-                    <label className="text-xs font-semibold text-gray-600 uppercase">CPU Load</label>
-                    <p className="mt-1 text-sm text-gray-900 font-mono">
-                      {dynamicData?.systemInfo?.cpuLoad || systemInfo?.hardwareInfo?.cpuLoad}%
-                    </p>
-                  </div>
-                )}
-                {(dynamicData?.systemInfo?.freeMemory || systemInfo?.hardwareInfo?.memoryUsage) && (
-                  <div>
-                    <label className="text-xs font-semibold text-gray-600 uppercase">Memória</label>
-                    <p className="mt-1 text-sm text-gray-900 font-mono">
-                      {dynamicData?.systemInfo?.freeMemory || systemInfo?.hardwareInfo?.memoryUsage}
-                      {(dynamicData?.systemInfo?.totalMemory || systemInfo?.hardwareInfo?.totalMemory) && (
-                        <span className="text-gray-500">
-                          {' / ' + (dynamicData?.systemInfo?.totalMemory || systemInfo?.hardwareInfo?.totalMemory)}
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                )}
-                {(dynamicData?.systemInfo?.temperature || systemInfo?.hardwareInfo?.temperature) && (
-                  <div>
-                    <label className="text-xs font-semibold text-gray-600 uppercase">Temperatura</label>
-                    <p className="mt-1 text-sm text-gray-900 font-mono">
-                      {dynamicData?.systemInfo?.temperature || systemInfo?.hardwareInfo?.temperature}°C
-                    </p>
-                  </div>
-                )}
-                {(dynamicData?.systemInfo?.uptime || systemInfo?.hardwareInfo?.uptime) && (
-                  <div>
-                    <label className="text-xs font-semibold text-gray-600 uppercase">Uptime</label>
-                    <p className="mt-1 text-sm text-gray-900 font-mono">
-                      {dynamicData?.systemInfo?.uptime || systemInfo?.hardwareInfo?.uptime}
-                    </p>
-                  </div>
-                )}
-              </>
-            )}
+            {(() => {
+              const hardwareInfo = systemInfo?.hardwareInfo 
+                ? (typeof systemInfo.hardwareInfo === 'string' 
+                    ? JSON.parse(systemInfo.hardwareInfo) 
+                    : systemInfo.hardwareInfo)
+                : null
+              
+              if (!hardwareInfo) return null
+              
+              return (
+                <>
+                  {hardwareInfo.cpuLoad && (
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 uppercase">CPU Load</label>
+                      <p className="mt-1 text-sm text-gray-900 font-mono">
+                        {hardwareInfo.cpuLoad}%
+                      </p>
+                    </div>
+                  )}
+                  {hardwareInfo.memoryUsage && (
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 uppercase">Memória</label>
+                      <p className="mt-1 text-sm text-gray-900 font-mono">
+                        {hardwareInfo.memoryUsage}
+                      </p>
+                    </div>
+                  )}
+                  {hardwareInfo.temperature && (
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 uppercase">Temperatura</label>
+                      <p className="mt-1 text-sm text-gray-900 font-mono">
+                        {hardwareInfo.temperature}°C
+                      </p>
+                    </div>
+                  )}
+                  {hardwareInfo.uptime && (
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 uppercase">Uptime</label>
+                      <p className="mt-1 text-sm text-gray-900 font-mono">
+                        {hardwareInfo.uptime}
+                      </p>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </div>
         </div>
       )}

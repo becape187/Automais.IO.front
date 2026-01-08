@@ -25,44 +25,6 @@ export default function Routers() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedRouter, setSelectedRouter] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [routerStatuses, setRouterStatuses] = useState({})
-  const pollingRef = useRef(false)
-
-  // Polling inteligente: atualiza status a cada 3 segundos (só se não estiver já fazendo requisição)
-  useEffect(() => {
-    if (!routers || routers.length === 0) return
-
-    const interval = setInterval(async () => {
-      // Só fazer nova requisição se a anterior já terminou
-      if (pollingRef.current) return
-      
-      pollingRef.current = true
-      try {
-        // Atualizar status de todos os routers online
-        const onlineRouters = routers.filter(r => r.status === 'Online')
-        for (const router of onlineRouters) {
-          try {
-            const response = await api.get(`/routers/${router.id}/management/status`)
-            if (response.data.connected) {
-              setRouterStatuses(prev => ({
-                ...prev,
-                [router.id]: {
-                  hardwareInfo: response.data.hardwareInfo,
-                  lastUpdated: new Date()
-                }
-              }))
-            }
-          } catch (err) {
-            // Ignorar erros individuais
-          }
-        }
-      } finally {
-        pollingRef.current = false
-      }
-    }, 3000) // 3 segundos
-
-    return () => clearInterval(interval)
-  }, [routers])
 
   const formatBytes = (bytes) => {
     if (!bytes || bytes === '0') return '0 B'
@@ -73,8 +35,13 @@ export default function Routers() {
     return `${num} B`
   }
 
-  const getRouterHardwareInfo = (routerId) => {
-    return routerStatuses[routerId]?.hardwareInfo
+  const getRouterHardwareInfo = (router) => {
+    if (!router.hardwareInfo) return null
+    try {
+      return JSON.parse(router.hardwareInfo)
+    } catch {
+      return null
+    }
   }
 
   const handleAdd = () => {
@@ -288,48 +255,48 @@ export default function Routers() {
               </div>
 
               {/* Informações de Hardware (se disponível) */}
-              {router.status === 'Online' && getRouterHardwareInfo(router.id) && (
-                <div className="grid grid-cols-2 gap-3 pt-4 border-t border-gray-200 mt-4">
-                  {getRouterHardwareInfo(router.id).cpuLoad && (
-                    <div className="flex items-center gap-2">
-                      <Cpu className="w-4 h-4 text-blue-500" />
-                      <div>
-                        <div className="text-xs text-gray-600">CPU</div>
-                        <div className="text-sm font-semibold text-gray-900">
-                          {getRouterHardwareInfo(router.id).cpuLoad}%
+              {(() => {
+                const hardwareInfo = getRouterHardwareInfo(router)
+                if (!hardwareInfo) return null
+                
+                return (
+                  <div className="grid grid-cols-2 gap-3 pt-4 border-t border-gray-200 mt-4">
+                    {hardwareInfo.cpuLoad && (
+                      <div className="flex items-center gap-2">
+                        <Cpu className="w-4 h-4 text-blue-500" />
+                        <div>
+                          <div className="text-xs text-gray-600">CPU</div>
+                          <div className="text-sm font-semibold text-gray-900">
+                            {hardwareInfo.cpuLoad}%
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                  {getRouterHardwareInfo(router.id).freeMemory && (
-                    <div className="flex items-center gap-2">
-                      <HardDrive className="w-4 h-4 text-green-500" />
-                      <div>
-                        <div className="text-xs text-gray-600">Memória Livre</div>
-                        <div className="text-sm font-semibold text-gray-900">
-                          {formatBytes(getRouterHardwareInfo(router.id).freeMemory)}
-                          {getRouterHardwareInfo(router.id).totalMemory && (
-                            <span className="text-gray-500 text-xs">
-                              {' / ' + formatBytes(getRouterHardwareInfo(router.id).totalMemory)}
-                            </span>
-                          )}
+                    )}
+                    {hardwareInfo.memoryUsage && (
+                      <div className="flex items-center gap-2">
+                        <HardDrive className="w-4 h-4 text-green-500" />
+                        <div>
+                          <div className="text-xs text-gray-600">Memória Livre</div>
+                          <div className="text-sm font-semibold text-gray-900">
+                            {formatBytes(hardwareInfo.memoryUsage)}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                  {getRouterHardwareInfo(router.id).temperature && (
-                    <div className="flex items-center gap-2 col-span-2">
-                      <Thermometer className="w-4 h-4 text-orange-500" />
-                      <div>
-                        <div className="text-xs text-gray-600">Temperatura</div>
-                        <div className="text-sm font-semibold text-gray-900">
-                          {getRouterHardwareInfo(router.id).temperature}°C
+                    )}
+                    {hardwareInfo.temperature && (
+                      <div className="flex items-center gap-2 col-span-2">
+                        <Thermometer className="w-4 h-4 text-orange-500" />
+                        <div>
+                          <div className="text-xs text-gray-600">Temperatura</div>
+                          <div className="text-sm font-semibold text-gray-900">
+                            {hardwareInfo.temperature}°C
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )
+              })()}
 
               <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-200">
                 {router.vpnNetworkId && (
