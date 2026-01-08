@@ -1,4 +1,5 @@
 import * as signalR from '@microsoft/signalr'
+import { SIGNALR_BASE_URL } from '../config/api'
 
 class SignalRService {
   constructor() {
@@ -28,7 +29,8 @@ class SignalRService {
     }
 
     // Criar nova conexão
-    const hubUrl = '/hubs/router-status'
+    const hubUrl = `${SIGNALR_BASE_URL}/router-status`
+    
     this.connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl)
       .withAutomaticReconnect({
