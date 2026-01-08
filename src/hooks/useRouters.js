@@ -37,6 +37,7 @@ export const useRouters = () => {
             ...router,
             status: data.status || data.Status,
             lastSeenAt: data.lastSeenAt || data.LastSeenAt,
+            latency: data.latency !== undefined ? data.latency : (data.Latency !== undefined ? data.Latency : router.latency),
           }
         }
         return router

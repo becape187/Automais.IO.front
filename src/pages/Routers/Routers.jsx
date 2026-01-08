@@ -231,11 +231,23 @@ export default function Routers() {
                 <p className="text-sm text-gray-600 mb-4">{router.description}</p>
               )}
 
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
+              <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-200">
                 <div>
                   <div className="text-xs text-gray-600 mb-1">Firmware</div>
                   <div className="text-sm font-semibold text-gray-900">
                     {router.firmwareVersion || 'N/A'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-600 mb-1">Latência</div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    {router.latency !== null && router.latency !== undefined ? (
+                      <span className={router.latency < 50 ? 'text-green-600' : router.latency < 100 ? 'text-yellow-600' : 'text-red-600'}>
+                        {router.latency}ms
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">N/A</span>
+                    )}
                   </div>
                 </div>
                 <div>
