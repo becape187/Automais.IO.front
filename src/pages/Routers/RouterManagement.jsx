@@ -19,6 +19,9 @@ import {
   Square
 } from 'lucide-react'
 import api from '../../services/api'
+import { routersApi } from '../../services/routersApi'
+import { routerOsWebSocketService } from '../../services/routerosWebSocketService'
+import { getRouterOsWsUrl } from '../../config/api'
 import clsx from 'clsx'
 import Modal from '../../components/Modal/Modal'
 
@@ -47,6 +50,8 @@ export default function RouterManagement() {
   const [actionLoading, setActionLoading] = useState(false)
   const [systemInfo, setSystemInfo] = useState(null)
   const [updatingSystemInfo, setUpdatingSystemInfo] = useState(false)
+  const [router, setRouter] = useState(null)
+  const wsConnectedRef = useRef(false)
 
   // Colunas do Winbox para cada tipo
   const WINBOX_COLUMNS = {
@@ -57,106 +62,197 @@ export default function RouterManagement() {
   }
 
   useEffect(() => {
-    checkConnection()
+    loadRouterData()
+    return () => {
+      // Desconectar WebSocket ao desmontar componente
+      if (wsConnectedRef.current) {
+        routerOsWebSocketService.disconnect()
+        wsConnectedRef.current = false
+      }
+    }
   }, [routerId])
 
   useEffect(() => {
-    if (connectionStatus?.connected) {
+    if (connectionStatus?.connected && router) {
       loadTabData()
     }
-  }, [activeTab, connectionStatus])
+  }, [activeTab, connectionStatus, router])
 
+  const loadRouterData = async () => {
+    try {
+      const routerData = await routersApi.getById(routerId)
+      setRouter(routerData)
+      await checkConnection(routerData)
+    } catch (err) {
+      setError('Erro ao carregar dados do router')
+      setConnectionStatus({ connected: false })
+    }
+  }
 
-  const checkConnection = async () => {
+  const getRouterIp = (routerData) => {
+    // Tentar obter do RouterOsApiUrl
+    if (routerData?.routerOsApiUrl) {
+      const parts = routerData.routerOsApiUrl.split(':')
+      if (parts.length > 0 && parts[0]) {
+        return parts[0].trim()
+      }
+    }
+    // Se não tiver, tentar buscar do peer WireGuard (seria necessário buscar via API)
+    return null
+  }
+
+  const checkConnection = async (routerData = router) => {
+    if (!routerData) {
+      setError('Dados do router não disponíveis')
+      return
+    }
+
     try {
       setLoading(true)
       setError(null)
-      const response = await api.get(`/routers/${routerId}/management/status`)
-      setConnectionStatus(response.data)
+
+      // Obter URL do WebSocket baseada no ServerEndpoint da VpnNetwork
+      const wsUrl = getRouterOsWsUrl(routerData.vpnNetworkServerEndpoint)
+      
+      // Conectar ao WebSocket se não estiver conectado ou se a URL mudou
+      if (!routerOsWebSocketService.isConnected() || routerOsWebSocketService.getCurrentUrl() !== wsUrl) {
+        // Desconectar se já estava conectado a uma URL diferente
+        if (routerOsWebSocketService.isConnected()) {
+          await routerOsWebSocketService.disconnect()
+        }
+        await routerOsWebSocketService.connect(wsUrl)
+        wsConnectedRef.current = true
+      }
+
+      // Obter IP do router
+      const routerIp = getRouterIp(routerData)
+      if (!routerIp) {
+        throw new Error('IP do router não encontrado. Configure RouterOsApiUrl ou crie um peer WireGuard.')
+      }
+
+      // Obter status via WebSocket
+      const status = await routerOsWebSocketService.getStatus(routerId, routerIp)
+      
+      setConnectionStatus({
+        connected: status.connected || false,
+        success: status.success || false,
+        routerIp: status.router_ip || routerIp,
+        identity: status.identity,
+        resource: status.resource,
+        error: status.error
+      })
       
       // Se conectou, atualizar informações do sistema
-      if (response.data.connected) {
+      if (status.connected && status.resource) {
+        const resource = status.resource
         setSystemInfo({
-          model: response.data.model,
-          serialNumber: response.data.serialNumber,
-          firmwareVersion: response.data.firmwareVersion,
-          hardwareInfo: response.data.hardwareInfo
+          model: resource['board-name'] || resource['board-name'] || '-',
+          serialNumber: routerData.serialNumber || '-',
+          firmwareVersion: resource.version || '-',
+          hardwareInfo: {
+            cpuLoad: resource['cpu-load'] || resource['cpu-load'] || '-',
+            memoryUsage: resource['free-memory'] && resource['total-memory'] 
+              ? `${Math.round((1 - resource['free-memory'] / resource['total-memory']) * 100)}%`
+              : '-',
+            uptime: resource.uptime || '-'
+          }
         })
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Erro ao conectar ao router')
-      setConnectionStatus({ connected: false })
+      setError(err.message || 'Erro ao conectar ao router')
+      setConnectionStatus({ connected: false, success: false, error: err.message })
     } finally {
       setLoading(false)
     }
   }
 
   const refreshSystemInfo = async () => {
-    try {
-      setUpdatingSystemInfo(true)
-      setError(null)
-      const response = await api.post(`/routers/${routerId}/management/system-info/refresh`)
-      
-      if (response.data.router) {
-        setSystemInfo({
-          model: response.data.router.model,
-          serialNumber: response.data.router.serialNumber,
-          firmwareVersion: response.data.router.firmwareVersion,
-          hardwareInfo: response.data.router.hardwareInfo
-        })
-      }
-    } catch (err) {
-      setError(err.response?.data?.message || 'Erro ao atualizar informações do sistema')
-    } finally {
-      setUpdatingSystemInfo(false)
-    }
+    // Recarregar status (que já traz informações do sistema)
+    await checkConnection()
   }
 
   const loadTabData = async () => {
-    if (!connectionStatus?.connected) return
+    if (!connectionStatus?.connected || !router) return
 
     try {
       setLoading(true)
       setError(null)
 
-      let endpoint = ''
+      const routerIp = getRouterIp(router)
+      if (!routerIp) {
+        throw new Error('IP do router não encontrado')
+      }
+
+      const username = router.routerOsApiUsername || 'admin'
+      const password = router.routerOsApiPassword || ''
+
+      let command = ''
       switch (activeTab) {
         case TABS.FIREWALL:
-          endpoint = 'firewall'
+          command = '/ip/firewall/filter/print'
           break
         case TABS.NAT:
-          endpoint = 'nat'
+          command = '/ip/firewall/nat/print'
           break
         case TABS.ROUTES:
-          endpoint = 'routes'
+          command = '/ip/route/print'
           break
         case TABS.INTERFACES:
-          endpoint = 'interfaces'
+          command = '/interface/print'
           break
         default:
           return
       }
 
-      const response = await api.get(`/routers/${routerId}/management/${endpoint}`)
-      setData(response.data)
+      // Executar comando via WebSocket
+      const result = await routerOsWebSocketService.executeCommand(
+        routerId,
+        routerIp,
+        username,
+        password,
+        command
+      )
+
+      // Processar resultado
+      if (result.success !== false && result.data) {
+        const items = Array.isArray(result.data) ? result.data : [result.data]
+        
+        switch (activeTab) {
+          case TABS.FIREWALL:
+            setData({ rules: items })
+            break
+          case TABS.NAT:
+            setData({ rules: items })
+            break
+          case TABS.ROUTES:
+            setData({ routes: items })
+            break
+          case TABS.INTERFACES:
+            setData({ interfaces: items })
+            break
+        }
+      } else {
+        throw new Error(result.error || 'Erro ao executar comando')
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'Erro ao carregar dados')
+      setError(err.message || 'Erro ao carregar dados')
     } finally {
       setLoading(false)
     }
   }
 
   const formatTerminalResult = (data) => {
-    // Se for um objeto com 'result', formatar como tabela do Winbox
+    // Se for um objeto com 'data' ou 'result', formatar como tabela do Winbox
     if (data && typeof data === 'object') {
-      // Verificar se tem 'result' (comando de leitura - retorna array)
-      if (data.result && Array.isArray(data.result)) {
-        if (data.result.length === 0) {
+      // Verificar se tem 'data' (resposta do WebSocket) ou 'result' (formato antigo)
+      const items = data.data || data.result
+      
+      if (items && Array.isArray(items)) {
+        if (items.length === 0) {
           return ''
         }
         
         // Formatar como tabela do Winbox
-        const items = data.result
         const allKeys = new Set()
         items.forEach(item => {
           Object.keys(item).forEach(key => {
@@ -205,7 +301,7 @@ export default function RouterManagement() {
       } 
       // Verificar se tem 'success' (comando de escrita)
       else if (data.success !== undefined) {
-        return data.message || ''
+        return data.message || (data.success ? 'Comando executado com sucesso' : data.error || '')
       }
     }
     
@@ -215,7 +311,7 @@ export default function RouterManagement() {
         return ''
       }
       // Formatar array como tabela
-      return formatTerminalResult({ result: data })
+      return formatTerminalResult({ data: data })
     }
     
     // Fallback: string vazia (não mostrar JSON raw)
@@ -223,17 +319,30 @@ export default function RouterManagement() {
   }
 
   const executeTerminalCommand = async () => {
-    if (!terminalCommand.trim() || executingCommand) return
+    if (!terminalCommand.trim() || executingCommand || !router) return
 
     try {
       setExecutingCommand(true)
       setError(null)
 
-      const response = await api.post(`/routers/${routerId}/management/terminal`, {
-        command: terminalCommand
-      })
+      const routerIp = getRouterIp(router)
+      if (!routerIp) {
+        throw new Error('IP do router não encontrado')
+      }
 
-      const formattedResult = formatTerminalResult(response.data)
+      const username = router.routerOsApiUsername || 'admin'
+      const password = router.routerOsApiPassword || ''
+
+      // Executar comando via WebSocket
+      const result = await routerOsWebSocketService.executeCommand(
+        routerId,
+        routerIp,
+        username,
+        password,
+        terminalCommand
+      )
+
+      const formattedResult = formatTerminalResult(result.data || result)
 
       setTerminalHistory(prev => [
         ...prev,
@@ -243,11 +352,11 @@ export default function RouterManagement() {
 
       setTerminalCommand('')
     } catch (err) {
-      setError(err.response?.data?.message || 'Erro ao executar comando')
+      setError(err.message || 'Erro ao executar comando')
       setTerminalHistory(prev => [
         ...prev,
         { type: 'command', content: terminalCommand },
-        { type: 'error', content: err.response?.data?.detail || err.message }
+        { type: 'error', content: err.message }
       ])
     } finally {
       setExecutingCommand(false)
@@ -326,44 +435,60 @@ export default function RouterManagement() {
     }
   }
 
+  const executeRouterCommand = async (command) => {
+    if (!router) throw new Error('Dados do router não disponíveis')
+
+    const routerIp = getRouterIp(router)
+    if (!routerIp) {
+      throw new Error('IP do router não encontrado')
+    }
+
+    const username = router.routerOsApiUsername || 'admin'
+    const password = router.routerOsApiPassword || ''
+
+    return await routerOsWebSocketService.executeCommand(
+      routerId,
+      routerIp,
+      username,
+      password,
+      command
+    )
+  }
+
   const handleEnableItem = async () => {
-    if (!selectedItem || !selectedItem['.id']) return
+    if (!selectedItem || !selectedItem['.id'] || !router) return
     
     try {
       setActionLoading(true)
       const command = getEnableCommand(activeTab, selectedItem['.id'])
-      await api.post(`/routers/${routerId}/management/terminal`, {
-        command: command
-      })
+      await executeRouterCommand(command)
       setSelectedItem(null)
       await loadTabData() // Recarregar dados
     } catch (err) {
-      setError(err.response?.data?.message || 'Erro ao ativar item')
+      setError(err.message || 'Erro ao ativar item')
     } finally {
       setActionLoading(false)
     }
   }
 
   const handleDisableItem = async () => {
-    if (!selectedItem || !selectedItem['.id']) return
+    if (!selectedItem || !selectedItem['.id'] || !router) return
     
     try {
       setActionLoading(true)
       const command = getDisableCommand(activeTab, selectedItem['.id'])
-      await api.post(`/routers/${routerId}/management/terminal`, {
-        command: command
-      })
+      await executeRouterCommand(command)
       setSelectedItem(null)
       await loadTabData() // Recarregar dados
     } catch (err) {
-      setError(err.response?.data?.message || 'Erro ao desativar item')
+      setError(err.message || 'Erro ao desativar item')
     } finally {
       setActionLoading(false)
     }
   }
 
   const handleDeleteItem = async () => {
-    if (!selectedItem || !selectedItem['.id']) return
+    if (!selectedItem || !selectedItem['.id'] || !router) return
     
     if (!window.confirm('Tem certeza que deseja excluir este item?')) {
       return
@@ -372,13 +497,11 @@ export default function RouterManagement() {
     try {
       setActionLoading(true)
       const command = getDeleteCommand(activeTab, selectedItem['.id'])
-      await api.post(`/routers/${routerId}/management/terminal`, {
-        command: command
-      })
+      await executeRouterCommand(command)
       setSelectedItem(null)
       await loadTabData() // Recarregar dados
     } catch (err) {
-      setError(err.response?.data?.message || 'Erro ao excluir item')
+      setError(err.message || 'Erro ao excluir item')
     } finally {
       setActionLoading(false)
     }
@@ -577,7 +700,7 @@ export default function RouterManagement() {
               Gerenciamento Router
             </h1>
             <p className="mt-1 text-sm text-gray-600">
-              {connectionStatus?.routerName || 'Carregando...'}
+              {router?.name || 'Carregando...'}
             </p>
           </div>
         </div>
