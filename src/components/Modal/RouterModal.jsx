@@ -4,7 +4,8 @@ import { useCreateRouter, useUpdateRouter } from '../../hooks/useRouters'
 import { vpnNetworksApi } from '../../services/vpnNetworksApi'
 import { routerStaticRoutesApi } from '../../services/routerStaticRoutesApi'
 import { getTenantId } from '../../config/tenant'
-import { Plus, Edit, Trash2, X, Check } from 'lucide-react'
+import { Plus, Edit, Trash2, X, Check, ChevronDown, ChevronUp } from 'lucide-react'
+import api from '../../services/api'
 
 export default function RouterModal({ isOpen, onClose, router = null }) {
   const isEditing = !!router
@@ -33,12 +34,14 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     destination: '',
     gateway: '',
     interface: '',
-    distance: '',
-    scope: '',
-    routingTable: '',
+    distance: '1',
+    scope: '30',
+    routingTable: 'main',
     description: ''
   })
   const [routeErrors, setRouteErrors] = useState({})
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [detectingInterface, setDetectingInterface] = useState(false)
 
   // Carregar redes VPN quando o modal abrir
   useEffect(() => {
@@ -140,18 +143,56 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     return Object.keys(newErrors).length === 0
   }
 
-  const handleAddRoute = () => {
+  const handleAddRoute = async () => {
     setEditingRoute({}) // Nova rota
     setRouteForm({
       destination: '',
       gateway: '',
       interface: '',
-      distance: '',
-      scope: '',
-      routingTable: '',
+      distance: '1',
+      scope: '30',
+      routingTable: 'main',
       description: ''
     })
     setRouteErrors({})
+    setShowAdvanced(false)
+    
+    // Deduzir interface WireGuard automaticamente
+    if (router?.id) {
+      await detectWireGuardInterface()
+    }
+  }
+
+  const detectWireGuardInterface = async () => {
+    if (!router?.id) return
+    
+    setDetectingInterface(true)
+    try {
+      // Buscar interfaces WireGuard do RouterOS
+      const interfaces = await routerStaticRoutesApi.getWireGuardInterfaces(router.id)
+      
+      // Buscar peer WireGuard do router no banco
+      const peersResponse = await api.get(`/routers/${router.id}/wireguard/peers`)
+      const peers = peersResponse.data
+      
+      if (peers && peers.length > 0 && interfaces && interfaces.length > 0) {
+        // Comparar publickey para encontrar a interface correta
+        const routerPublicKey = peers[0].publicKey
+        const matchingInterface = interfaces.find(iface => iface.publicKey === routerPublicKey)
+        
+        if (matchingInterface) {
+          setRouteForm(prev => ({
+            ...prev,
+            interface: matchingInterface.name
+          }))
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao detectar interface WireGuard:', error)
+      // Não bloquear o fluxo, apenas logar o erro
+    } finally {
+      setDetectingInterface(false)
+    }
   }
 
   const handleEditRoute = (route) => {
@@ -174,12 +215,13 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
       destination: '',
       gateway: '',
       interface: '',
-      distance: '',
-      scope: '',
-      routingTable: '',
+      distance: '1',
+      scope: '30',
+      routingTable: 'main',
       description: ''
     })
     setRouteErrors({})
+    setShowAdvanced(false)
   }
 
   const handleSaveRoute = async () => {
@@ -573,61 +615,85 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
 
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Interface
+                      Interface {detectingInterface && <span className="text-blue-500 text-xs">(Detectando...)</span>}
                     </label>
                     <input
                       type="text"
                       name="interface"
                       value={routeForm.interface}
                       onChange={handleRouteFormChange}
-                      className="input w-full text-sm"
-                      placeholder="eth1"
+                      className="input w-full text-sm bg-gray-50"
+                      placeholder="Interface WireGuard (detectada automaticamente)"
+                      readOnly
+                      disabled
                     />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Interface detectada automaticamente comparando publickey do peer WireGuard
+                    </p>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Distance
-                    </label>
-                    <input
-                      type="number"
-                      name="distance"
-                      value={routeForm.distance}
-                      onChange={handleRouteFormChange}
-                      className="input w-full text-sm"
-                      placeholder="1"
-                      min="0"
-                    />
-                  </div>
+                </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Scope
-                    </label>
-                    <input
-                      type="number"
-                      name="scope"
-                      value={routeForm.scope}
-                      onChange={handleRouteFormChange}
-                      className="input w-full text-sm"
-                      placeholder="30"
-                      min="0"
-                    />
-                  </div>
+                {/* Seção Avançado */}
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                    className="flex items-center gap-2 text-xs font-medium text-gray-700 hover:text-gray-900"
+                  >
+                    {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    Configurações Avançadas
+                  </button>
+                  
+                  {showAdvanced && (
+                    <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Distance
+                          </label>
+                          <input
+                            type="number"
+                            name="distance"
+                            value={routeForm.distance}
+                            onChange={handleRouteFormChange}
+                            className="input w-full text-sm"
+                            placeholder="1"
+                            min="0"
+                          />
+                        </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Routing Table
-                    </label>
-                    <input
-                      type="text"
-                      name="routingTable"
-                      value={routeForm.routingTable}
-                      onChange={handleRouteFormChange}
-                      className="input w-full text-sm"
-                      placeholder="main"
-                    />
-                  </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Scope
+                          </label>
+                          <input
+                            type="number"
+                            name="scope"
+                            value={routeForm.scope}
+                            onChange={handleRouteFormChange}
+                            className="input w-full text-sm"
+                            placeholder="30"
+                            min="0"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Routing Table
+                          </label>
+                          <input
+                            type="text"
+                            name="routingTable"
+                            value={routeForm.routingTable}
+                            onChange={handleRouteFormChange}
+                            className="input w-full text-sm"
+                            placeholder="main"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-3">

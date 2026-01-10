@@ -41,4 +41,10 @@ export const routerStaticRoutesApi = {
     const response = await api.post(`/routers/${routerId}/routes/apply`)
     return response.data
   },
+
+  // Listar interfaces WireGuard do RouterOS
+  getWireGuardInterfaces: async (routerId) => {
+    const response = await api.get(`/routers/${routerId}/routes/wireguard-interfaces`)
+    return response.data
+  },
 }
