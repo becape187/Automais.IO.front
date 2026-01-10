@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import Modal from './Modal'
+import MessageModal from './MessageModal'
+import ConfirmModal from './ConfirmModal'
 import { 
   useCreateUser, 
   useUpdateUser, 
@@ -36,6 +38,8 @@ export default function UserModal({ isOpen, onClose, user = null }) {
   const [selectedRoutes, setSelectedRoutes] = useState(new Set())
   const [errors, setErrors] = useState({})
   const [activeTab, setActiveTab] = useState('basic') // 'basic' ou 'routes'
+  const [messageModal, setMessageModal] = useState({ isOpen: false, type: 'info', message: '' })
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, message: '', onConfirm: null })
 
   // Atualizar formData quando o usuário mudar ou o modal abrir
   useEffect(() => {
@@ -136,26 +140,45 @@ export default function UserModal({ isOpen, onClose, user = null }) {
         await createUser.mutateAsync(formData)
       }
       onClose()
+      setMessageModal({
+        isOpen: true,
+        type: 'success',
+        message: isEditing ? 'Usuário atualizado com sucesso!' : 'Usuário criado com sucesso!'
+      })
     } catch (error) {
       console.error('Erro ao salvar usuário:', error)
-      alert(error.message || 'Erro ao salvar usuário')
+      setMessageModal({
+        isOpen: true,
+        type: 'error',
+        message: error.message || 'Erro ao salvar usuário'
+      })
     }
   }
 
-  const handleResetPassword = async () => {
+  const handleResetPassword = () => {
     if (!user?.id) return
     
-    if (!window.confirm(`Deseja realmente resetar a senha do usuário "${user.name}"? Uma nova senha temporária será enviada por email.`)) {
-      return
-    }
-
-    try {
-      await resetPassword.mutateAsync(user.id)
-      alert('Senha resetada com sucesso! Um email com a nova senha temporária foi enviado.')
-    } catch (error) {
-      console.error('Erro ao resetar senha:', error)
-      alert(error.message || 'Erro ao resetar senha')
-    }
+    setConfirmModal({
+      isOpen: true,
+      message: `Deseja realmente resetar a senha do usuário "${user.name}"? Uma nova senha temporária será enviada por email.`,
+      onConfirm: async () => {
+        try {
+          await resetPassword.mutateAsync(user.id)
+          setMessageModal({
+            isOpen: true,
+            type: 'success',
+            message: 'Senha resetada com sucesso! Um email com a nova senha temporária foi enviado.'
+          })
+        } catch (error) {
+          console.error('Erro ao resetar senha:', error)
+          setMessageModal({
+            isOpen: true,
+            type: 'error',
+            message: error.message || 'Erro ao resetar senha'
+          })
+        }
+      }
+    })
   }
 
   // Agrupar rotas por router
@@ -206,103 +229,108 @@ export default function UserModal({ isOpen, onClose, user = null }) {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Nome <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            name="name"
-            value={formData.name}
-            onChange={handleChange}
-            className={`input w-full ${errors.name ? 'border-red-500' : ''}`}
-            placeholder="Ex: João Silva"
-          />
-          {errors.name && (
-            <p className="mt-1 text-sm text-red-600">{errors.name}</p>
-          )}
-        </div>
+        {/* Informações Básicas - Mostrar apenas quando não está editando ou quando a aba 'basic' está ativa */}
+        {(!isEditing || activeTab === 'basic') && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Nome <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                className={`input w-full ${errors.name ? 'border-red-500' : ''}`}
+                placeholder="Ex: João Silva"
+              />
+              {errors.name && (
+                <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+              )}
+            </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Email <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="email"
-            name="email"
-            value={formData.email}
-            onChange={handleChange}
-            className={`input w-full ${errors.email ? 'border-red-500' : ''}`}
-            placeholder="Ex: joao@example.com"
-          />
-          {errors.email && (
-            <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-          )}
-          <p className="mt-1 text-xs text-gray-500">
-            O email será usado como login do usuário
-          </p>
-        </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                className={`input w-full ${errors.email ? 'border-red-500' : ''}`}
+                placeholder="Ex: joao@example.com"
+              />
+              {errors.email && (
+                <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+              )}
+              <p className="mt-1 text-xs text-gray-500">
+                O email será usado como login do usuário
+              </p>
+            </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Role <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="role"
-            value={formData.role}
-            onChange={handleChange}
-            className="input w-full"
-          >
-            {roleOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Role <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="role"
+                value={formData.role}
+                onChange={handleChange}
+                className="input w-full"
+              >
+                {roleOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              name="vpnEnabled"
-              checked={formData.vpnEnabled}
-              onChange={handleChange}
-              className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
-            />
-            <span className="text-sm font-medium text-gray-700">
-              Habilitar VPN para este usuário
-            </span>
-          </label>
-          <p className="mt-1 text-xs text-gray-500">
-            Permite que o usuário se conecte à VPN e acesse rotas configuradas
-          </p>
-          {isEditing && (
-            <p className="mt-1 text-xs text-gray-600">
-              Status atual: {formData.vpnEnabled ? 'VPN Ativada' : 'VPN Desativada'}
-            </p>
-          )}
-        </div>
+            <div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="vpnEnabled"
+                  checked={formData.vpnEnabled}
+                  onChange={handleChange}
+                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  Habilitar VPN para este usuário
+                </span>
+              </label>
+              <p className="mt-1 text-xs text-gray-500">
+                Permite que o usuário se conecte à VPN e acesse rotas configuradas
+              </p>
+              {isEditing && (
+                <p className="mt-1 text-xs text-gray-600">
+                  Status atual: {formData.vpnEnabled ? 'VPN Ativada' : 'VPN Desativada'}
+                </p>
+              )}
+            </div>
 
-        {/* Botão de resetar senha (apenas ao editar) */}
-        {isEditing && (
-          <div className="border-t border-gray-200 pt-4">
-            <button
-              type="button"
-              onClick={handleResetPassword}
-              className="btn btn-secondary w-full flex items-center justify-center gap-2"
-              disabled={resetPassword.isPending}
-            >
-              <KeyRound className="w-4 h-4" />
-              {resetPassword.isPending ? 'Enviando...' : 'Resetar Senha'}
-            </button>
-            <p className="mt-2 text-xs text-gray-500 text-center">
-              Uma nova senha temporária será gerada e enviada por email
-            </p>
-          </div>
+            {/* Botão de resetar senha (apenas ao editar) */}
+            {isEditing && (
+              <div className="border-t border-gray-200 pt-4">
+                <button
+                  type="button"
+                  onClick={handleResetPassword}
+                  className="btn btn-secondary w-full flex items-center justify-center gap-2"
+                  disabled={resetPassword.isPending}
+                >
+                  <KeyRound className="w-4 h-4" />
+                  {resetPassword.isPending ? 'Enviando...' : 'Resetar Senha'}
+                </button>
+                <p className="mt-2 text-xs text-gray-500 text-center">
+                  Uma nova senha temporária será gerada e enviada por email
+                </p>
+              </div>
+            )}
+          </>
         )}
 
-        {/* Seção de Rotas (apenas ao editar) */}
+        {/* Seção de Rotas (apenas ao editar e quando a aba 'routes' está ativa) */}
         {isEditing && activeTab === 'routes' && (
           <div className="space-y-4 border-t border-gray-200 pt-4">
             <div className="flex items-center justify-between">
@@ -392,6 +420,22 @@ export default function UserModal({ isOpen, onClose, user = null }) {
           </button>
         </div>
       </form>
+
+      {/* Modal de Mensagem */}
+      <MessageModal
+        isOpen={messageModal.isOpen}
+        onClose={() => setMessageModal({ isOpen: false, type: 'info', message: '' })}
+        type={messageModal.type}
+        message={messageModal.message}
+      />
+
+      {/* Modal de Confirmação */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ isOpen: false, message: '', onConfirm: null })}
+        onConfirm={confirmModal.onConfirm || (() => {})}
+        message={confirmModal.message}
+      />
     </Modal>
   )
 }

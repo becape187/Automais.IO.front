@@ -3,6 +3,8 @@ import { Users as UsersIcon, Plus, Search, Mail, Shield, MoreVertical, Trash2, E
 import clsx from 'clsx'
 import { useUsers, useDeleteUser } from '../../hooks/useUsers'
 import UserModal from '../../components/Modal/UserModal'
+import MessageModal from '../../components/Modal/MessageModal'
+import ConfirmModal from '../../components/Modal/ConfirmModal'
 
 const roleLabels = {
   Owner: { label: 'Owner', color: 'badge-primary' },
@@ -26,6 +28,8 @@ export default function Users() {
   const [searchTerm, setSearchTerm] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [messageModal, setMessageModal] = useState({ isOpen: false, type: 'info', message: '' })
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, message: '', onConfirm: null })
 
   const handleAdd = () => {
     setSelectedUser(null)
@@ -37,14 +41,27 @@ export default function Users() {
     setIsModalOpen(true)
   }
 
-  const handleDelete = async (id, name) => {
-    if (window.confirm(`Tem certeza que deseja remover o usuário "${name}"?`)) {
-      try {
-        await deleteUser.mutateAsync(id)
-      } catch (error) {
-        alert(error.message || 'Erro ao remover usuário')
+  const handleDelete = (id, name) => {
+    setConfirmModal({
+      isOpen: true,
+      message: `Tem certeza que deseja remover o usuário "${name}"?`,
+      onConfirm: async () => {
+        try {
+          await deleteUser.mutateAsync(id)
+          setMessageModal({
+            isOpen: true,
+            type: 'success',
+            message: 'Usuário removido com sucesso!'
+          })
+        } catch (error) {
+          setMessageModal({
+            isOpen: true,
+            type: 'error',
+            message: error.message || 'Erro ao remover usuário'
+          })
+        }
       }
-    }
+    })
   }
 
   const filteredUsers = users?.filter((user) => {
@@ -267,6 +284,22 @@ export default function Users() {
           setSelectedUser(null)
         }}
         user={selectedUser}
+      />
+
+      {/* Modal de Mensagem */}
+      <MessageModal
+        isOpen={messageModal.isOpen}
+        onClose={() => setMessageModal({ isOpen: false, type: 'info', message: '' })}
+        type={messageModal.type}
+        message={messageModal.message}
+      />
+
+      {/* Modal de Confirmação */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ isOpen: false, message: '', onConfirm: null })}
+        onConfirm={confirmModal.onConfirm || (() => {})}
+        message={confirmModal.message}
       />
     </div>
   )
