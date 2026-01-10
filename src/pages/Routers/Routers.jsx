@@ -199,7 +199,7 @@ export default function Routers() {
           {filteredRouters.map((router) => (
             <div 
               key={router.id} 
-              className="card p-6 cursor-pointer hover:border-primary-500 hover:border-2 transition-all"
+              className="card p-6 cursor-pointer border-2 border-transparent hover:border-primary-500 transition-colors"
               onClick={() => navigate(`/routers/${router.id}/management`)}
             >
               <div className="flex items-start justify-between mb-4">
