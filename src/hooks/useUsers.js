@@ -86,3 +86,15 @@ export const useUpdateUserRoutes = () => {
   })
 }
 
+export const useResetPassword = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id) => usersApi.resetPassword(id),
+    onSuccess: (_, userId) => {
+      queryClient.invalidateQueries({ queryKey: ['user', userId] })
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+    },
+  })
+}
+

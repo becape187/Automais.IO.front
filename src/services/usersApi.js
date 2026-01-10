@@ -52,5 +52,11 @@ export const usersApi = {
   updateUserRoutes: async (id, data) => {
     await api.put(`/users/${id}/routes`, data)
   },
+
+  // Resetar senha do usuário
+  resetPassword: async (id) => {
+    const response = await api.post(`/users/${id}/reset-password`)
+    return response.data
+  },
 }
 

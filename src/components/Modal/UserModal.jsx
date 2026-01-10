@@ -5,9 +5,10 @@ import {
   useUpdateUser, 
   useAvailableRoutes, 
   useUserRoutes, 
-  useUpdateUserRoutes 
+  useUpdateUserRoutes,
+  useResetPassword
 } from '../../hooks/useUsers'
-import { Check, X } from 'lucide-react'
+import { Check, X, KeyRound } from 'lucide-react'
 
 const roleOptions = [
   { value: 'Owner', label: 'Owner' },
@@ -21,24 +22,50 @@ export default function UserModal({ isOpen, onClose, user = null }) {
   const createUser = useCreateUser()
   const updateUser = useUpdateUser()
   const updateUserRoutes = useUpdateUserRoutes()
+  const resetPassword = useResetPassword()
   const { data: availableRoutes = [] } = useAvailableRoutes()
   const { data: userRoutes = [] } = useUserRoutes(user?.id)
 
   const [formData, setFormData] = useState({
-    name: user?.name || '',
-    email: user?.email || '',
-    role: user?.role || 'Viewer',
-    vpnEnabled: user?.vpnEnabled || false,
+    name: '',
+    email: '',
+    role: 'Viewer',
+    vpnEnabled: false,
   })
 
   const [selectedRoutes, setSelectedRoutes] = useState(new Set())
   const [errors, setErrors] = useState({})
   const [activeTab, setActiveTab] = useState('basic') // 'basic' ou 'routes'
 
+  // Atualizar formData quando o usuário mudar ou o modal abrir
+  useEffect(() => {
+    if (isOpen) {
+      if (user) {
+        setFormData({
+          name: user.name || '',
+          email: user.email || '',
+          role: user.role || 'Viewer',
+          vpnEnabled: user.vpnEnabled || false,
+        })
+      } else {
+        setFormData({
+          name: '',
+          email: '',
+          role: 'Viewer',
+          vpnEnabled: false,
+        })
+      }
+      setActiveTab('basic')
+      setErrors({})
+    }
+  }, [isOpen, user])
+
   // Carregar rotas selecionadas quando abrir modal de edição
   useEffect(() => {
     if (isEditing && userRoutes.length > 0) {
       setSelectedRoutes(new Set(userRoutes.map(r => r.routerAllowedNetworkId)))
+    } else {
+      setSelectedRoutes(new Set())
     }
   }, [isEditing, userRoutes])
 
@@ -109,16 +136,25 @@ export default function UserModal({ isOpen, onClose, user = null }) {
         await createUser.mutateAsync(formData)
       }
       onClose()
-      setFormData({
-        name: '',
-        email: '',
-        role: 'Viewer',
-        vpnEnabled: false,
-      })
-      setSelectedRoutes(new Set())
     } catch (error) {
       console.error('Erro ao salvar usuário:', error)
       alert(error.message || 'Erro ao salvar usuário')
+    }
+  }
+
+  const handleResetPassword = async () => {
+    if (!user?.id) return
+    
+    if (!window.confirm(`Deseja realmente resetar a senha do usuário "${user.name}"? Uma nova senha temporária será enviada por email.`)) {
+      return
+    }
+
+    try {
+      await resetPassword.mutateAsync(user.id)
+      alert('Senha resetada com sucesso! Um email com a nova senha temporária foi enviado.')
+    } catch (error) {
+      console.error('Erro ao resetar senha:', error)
+      alert(error.message || 'Erro ao resetar senha')
     }
   }
 
@@ -181,7 +217,6 @@ export default function UserModal({ isOpen, onClose, user = null }) {
             onChange={handleChange}
             className={`input w-full ${errors.name ? 'border-red-500' : ''}`}
             placeholder="Ex: João Silva"
-            disabled={isEditing}
           />
           {errors.name && (
             <p className="mt-1 text-sm text-red-600">{errors.name}</p>
@@ -199,11 +234,13 @@ export default function UserModal({ isOpen, onClose, user = null }) {
             onChange={handleChange}
             className={`input w-full ${errors.email ? 'border-red-500' : ''}`}
             placeholder="Ex: joao@example.com"
-            disabled={isEditing}
           />
           {errors.email && (
             <p className="mt-1 text-sm text-red-600">{errors.email}</p>
           )}
+          <p className="mt-1 text-xs text-gray-500">
+            O email será usado como login do usuário
+          </p>
         </div>
 
         <div>
@@ -240,7 +277,30 @@ export default function UserModal({ isOpen, onClose, user = null }) {
           <p className="mt-1 text-xs text-gray-500">
             Permite que o usuário se conecte à VPN e acesse rotas configuradas
           </p>
+          {isEditing && (
+            <p className="mt-1 text-xs text-gray-600">
+              Status atual: {formData.vpnEnabled ? 'VPN Ativada' : 'VPN Desativada'}
+            </p>
+          )}
         </div>
+
+        {/* Botão de resetar senha (apenas ao editar) */}
+        {isEditing && (
+          <div className="border-t border-gray-200 pt-4">
+            <button
+              type="button"
+              onClick={handleResetPassword}
+              className="btn btn-secondary w-full flex items-center justify-center gap-2"
+              disabled={resetPassword.isPending}
+            >
+              <KeyRound className="w-4 h-4" />
+              {resetPassword.isPending ? 'Enviando...' : 'Resetar Senha'}
+            </button>
+            <p className="mt-2 text-xs text-gray-500 text-center">
+              Uma nova senha temporária será gerada e enviada por email
+            </p>
+          </div>
+        )}
 
         {/* Seção de Rotas (apenas ao editar) */}
         {isEditing && activeTab === 'routes' && (
