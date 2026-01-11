@@ -21,7 +21,6 @@ import {
 import api from '../../services/api'
 import { routersApi } from '../../services/routersApi'
 import { routerOsWebSocketService } from '../../services/routerosWebSocketService'
-import { getRouterOsWsUrl } from '../../config/api'
 import clsx from 'clsx'
 import Modal from '../../components/Modal/Modal'
 
@@ -111,16 +110,14 @@ export default function RouterManagement() {
       setLoading(true)
       setError(null)
 
-      // Obter URL do WebSocket baseada no ServerEndpoint da VpnNetwork
-      const wsUrl = getRouterOsWsUrl(routerData.vpnNetworkServerEndpoint)
-      
-      // Conectar ao WebSocket se não estiver conectado ou se a URL mudou
-      if (!routerOsWebSocketService.isConnected() || routerOsWebSocketService.getCurrentUrl() !== wsUrl) {
-        // Desconectar se já estava conectado a uma URL diferente
+      // Conectar ao WebSocket via API C# usando routerId
+      // A API C# fará o proxy para o routeros.io Python baseado no ServerEndpoint da VpnNetwork
+      if (!routerOsWebSocketService.isConnected() || routerOsWebSocketService.getCurrentRouterId() !== routerId) {
+        // Desconectar se já estava conectado a um router diferente
         if (routerOsWebSocketService.isConnected()) {
           await routerOsWebSocketService.disconnect()
         }
-        await routerOsWebSocketService.connect(wsUrl)
+        await routerOsWebSocketService.connect(routerId)
         wsConnectedRef.current = true
       }
 

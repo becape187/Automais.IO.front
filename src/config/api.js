@@ -17,32 +17,37 @@ export const SIGNALR_BASE_URL = isProduction
   ? 'https://automais.io:5001/hubs'
   : '/hubs'
 
-// URL do WebSocket RouterOS (serviço Python)
-// Esta URL é construída dinamicamente baseada no ServerEndpoint da VpnNetwork do router
-// Função para construir URL do WebSocket baseada no ServerEndpoint
-export const getRouterOsWsUrl = (serverEndpoint) => {
-  if (!serverEndpoint) {
-    // Fallback para URL padrão se não houver ServerEndpoint
-    return isProduction 
-      ? 'ws://automais.io:8765'
-      : 'ws://localhost:8765'
+// URL do WebSocket RouterOS (via API C# como proxy)
+// A API C# faz proxy para o servidor routeros.io Python baseado no routerId
+// IMPORTANTE: Detecta automaticamente se deve usar ws:// ou wss:// baseado no protocolo da página
+// Função para construir URL do WebSocket na API C# baseada no routerId
+export const getRouterOsWsUrl = (routerId) => {
+  // Detectar se a página está em HTTPS para usar wss:// (WebSocket seguro)
+  // Páginas HTTPS não podem conectar a WebSockets inseguros (ws://)
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
+  const wsProtocol = isHttps ? 'wss://' : 'ws://'
+  
+  if (!routerId) {
+    throw new Error('routerId é obrigatório para conectar ao WebSocket RouterOS')
   }
   
-  // Construir URL baseada no ServerEndpoint
-  // Se o ServerEndpoint já contém protocolo, usar; senão, adicionar ws://
-  if (serverEndpoint.startsWith('ws://') || serverEndpoint.startsWith('wss://')) {
-    // Se já tem porta, usar como está; senão, adicionar porta padrão
-    if (serverEndpoint.includes(':')) {
-      return serverEndpoint
-    }
-    return `${serverEndpoint}:8765`
-  }
+  // Construir URL do WebSocket na API C#: /api/ws/routeros/{routerId}
+  // A API C# fará o proxy para o routeros.io Python baseado no ServerEndpoint da VpnNetwork
+  const wsPath = `/api/ws/routeros/${routerId}`
   
-  // Adicionar protocolo e porta
-  return `ws://${serverEndpoint}:8765`
+  if (isProduction) {
+    // Em produção, usar o mesmo host da API
+    return `${wsProtocol}automais.io:5001${wsPath}`
+  } else {
+    // Em desenvolvimento, usar localhost (o proxy do Vite não funciona para WebSocket, usar localhost direto)
+    return `${wsProtocol}localhost:5000${wsPath}`
+  }
 }
 
 // URL padrão (para compatibilidade, mas deve ser substituída por getRouterOsWsUrl)
+// Detecta automaticamente se deve usar ws:// ou wss:// baseado no protocolo da página
+const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
+const defaultWsProtocol = isHttps ? 'wss://' : 'ws://'
 export const ROUTEROS_WS_URL = isProduction 
-  ? 'ws://automais.io:8765'
-  : 'ws://localhost:8765'
+  ? `${defaultWsProtocol}automais.io:5001/api/ws/routeros`
+  : `${defaultWsProtocol}localhost:5000/api/ws/routeros`

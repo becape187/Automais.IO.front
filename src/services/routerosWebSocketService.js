@@ -1,13 +1,13 @@
-import { ROUTEROS_WS_URL } from '../config/api'
+import { getRouterOsWsUrl } from '../config/api'
 
 /**
  * Serviço WebSocket para comunicação com o RouterOS WebSocket Service (Python)
- * Conecta diretamente ao serviço Python
+ * Conecta através da API C# que faz proxy para o serviço Python
  */
 class RouterOsWebSocketService {
   constructor() {
     this.connection = null
-    this.currentUrl = null
+    this.currentRouterId = null
     this.messageId = 0
     this.pendingRequests = new Map()
     this.listeners = new Map()
@@ -17,12 +17,17 @@ class RouterOsWebSocketService {
   }
 
   /**
-   * Conecta ao WebSocket do serviço RouterOS
-   * @param {string} wsUrl - URL do WebSocket (padrão: da configuração)
+   * Conecta ao WebSocket do serviço RouterOS via API C#
+   * @param {string} routerId - ID do router (obrigatório)
    */
-  async connect(wsUrl = ROUTEROS_WS_URL) {
-    // Se já está conectado à mesma URL, retornar conexão existente
-    if (this.connection?.readyState === WebSocket.OPEN && this.currentUrl === wsUrl) {
+  async connect(routerId) {
+    if (!routerId) {
+      throw new Error('routerId é obrigatório para conectar ao WebSocket RouterOS')
+    }
+
+    const wsUrl = getRouterOsWsUrl(routerId)
+    // Se já está conectado ao mesmo router, retornar conexão existente
+    if (this.connection?.readyState === WebSocket.OPEN && this.currentRouterId === routerId) {
       return this.connection
     }
 
@@ -46,7 +51,8 @@ class RouterOsWebSocketService {
         this.connection = new WebSocket(wsUrl)
 
         this.connection.onopen = () => {
-          console.log('RouterOS WebSocket conectado')
+          console.log('RouterOS WebSocket conectado para router', routerId)
+          this.currentRouterId = routerId
           this.reconnectAttempts = 0
           this.emit('connected')
           resolve(this.connection)
@@ -77,7 +83,7 @@ class RouterOsWebSocketService {
             const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1)
             console.log(`Tentando reconectar em ${delay}ms... (tentativa ${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
             setTimeout(() => {
-              this.connect(wsUrl).catch(console.error)
+              this.connect(this.currentRouterId).catch(console.error)
             }, delay)
           }
         }
@@ -94,17 +100,17 @@ class RouterOsWebSocketService {
     if (this.connection) {
       this.connection.close(1000, 'Desconexão solicitada')
       this.connection = null
-      this.currentUrl = null
+      this.currentRouterId = null
       this.pendingRequests.clear()
       this.listeners.clear()
     }
   }
 
   /**
-   * Obtém a URL atual da conexão WebSocket
+   * Obtém o routerId atual da conexão WebSocket
    */
-  getCurrentUrl() {
-    return this.currentUrl
+  getCurrentRouterId() {
+    return this.currentRouterId
   }
 
   /**
