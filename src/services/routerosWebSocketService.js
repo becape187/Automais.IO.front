@@ -293,5 +293,21 @@ class RouterOsWebSocketService {
   }
 }
 
-// Exportar instância singleton
-export const routerOsWebSocketService = new RouterOsWebSocketService()
+// Criar instância singleton (lazy - só quando necessário)
+let _instance = null
+
+function getInstance() {
+  if (!_instance) {
+    _instance = new RouterOsWebSocketService()
+  }
+  return _instance
+}
+
+// Exportar como objeto proxy para manter compatibilidade com código existente
+export const routerOsWebSocketService = new Proxy({}, {
+  get(target, prop) {
+    const instance = getInstance()
+    const value = instance[prop]
+    return typeof value === 'function' ? value.bind(instance) : value
+  }
+})
