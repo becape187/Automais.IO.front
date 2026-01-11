@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Modal from './Modal'
 import { useCreateRouter, useUpdateRouter } from '../../hooks/useRouters'
 import { vpnNetworksApi } from '../../services/vpnNetworksApi'
@@ -52,6 +52,29 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     }
   }, [isOpen, isEditing, router?.id])
 
+  // Polling automático para rotas com erro ou pendentes de remoção
+  useEffect(() => {
+    // Verificar se há rotas com Error ou PendingRemove
+    const hasErrorOrPendingRemove = routes.some(
+      route => route.status === 'Error' || route.status === 'PendingRemove'
+    )
+
+    // Se não houver rotas com erro ou o modal estiver fechado, não fazer polling
+    if (!hasErrorOrPendingRemove || !isOpen || !isEditing || !router?.id) {
+      return
+    }
+
+    // Configurar polling a cada 3 segundos
+    const intervalId = setInterval(() => {
+      loadRoutes()
+    }, 3000)
+
+    // Limpar intervalo quando componente desmontar ou condições mudarem
+    return () => {
+      clearInterval(intervalId)
+    }
+  }, [routes, isOpen, isEditing, router?.id, loadRoutes])
+
   // Atualizar formData quando o router mudar (ao editar)
   useEffect(() => {
     if (router) {
@@ -94,7 +117,7 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     }
   }
 
-  const loadRoutes = async () => {
+  const loadRoutes = useCallback(async () => {
     if (!router?.id) return
     
     try {
@@ -107,7 +130,7 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     } finally {
       setLoadingRoutes(false)
     }
-  }
+  }, [router?.id])
 
   const handleRouteFormChange = (e) => {
     const { name, value } = e.target
