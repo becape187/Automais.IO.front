@@ -259,7 +259,7 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
   const getStatusBadge = (status) => {
     const statusMap = {
       'PendingAdd': { label: 'Pendente Adicionar', color: 'bg-yellow-100 text-yellow-800' },
-      'PendingRemove': { label: 'Pendente Remover', color: 'bg-orange-100 text-orange-800' },
+      'PendingRemove': { label: 'Pendente Remover', color: 'bg-red-100 text-red-800' },
       'Applied': { label: 'Aplicada', color: 'bg-green-100 text-green-800' },
       'Error': { label: 'Erro', color: 'bg-red-100 text-red-800' }
     }
@@ -683,11 +683,13 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
               </div>
             ) : (
               <div className="space-y-2 max-h-64 overflow-y-auto">
-                {routes.map((route) => (
+                {routes.map((route) => {
+                  const isErrorOrPendingRemove = route.status === 'Error' || route.status === 'PendingRemove';
+                  return (
                   <div
                     key={route.id}
                     className={`p-3 border rounded-lg flex items-center justify-between ${
-                      route.status === 'Error' 
+                      isErrorOrPendingRemove
                         ? 'bg-red-50 border-red-300' 
                         : 'bg-white border-gray-200'
                     }`}
@@ -710,9 +712,14 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
                           {route.description && <span className="ml-2">• {route.description}</span>}
                         </div>
                       )}
-                      {route.status === 'Error' && route.errorMessage && (
+                      {isErrorOrPendingRemove && route.errorMessage && (
                         <div className="text-xs text-red-600 mt-1 font-semibold">
-                          ⚠️ Erro: {route.errorMessage}
+                          ⚠️ {route.status === 'PendingRemove' ? 'Aguardando remoção' : 'Erro'}: {route.errorMessage}
+                        </div>
+                      )}
+                      {route.status === 'PendingRemove' && !route.errorMessage && (
+                        <div className="text-xs text-red-600 mt-1 font-semibold">
+                          ⚠️ Aguardando remoção do RouterOS...
                         </div>
                       )}
                     </div>
@@ -737,7 +744,8 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
