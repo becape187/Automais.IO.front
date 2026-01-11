@@ -125,16 +125,16 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     if (!routeForm.destination.trim()) {
       newErrors.destination = 'Destino é obrigatório'
     }
-    if (!routeForm.gateway.trim()) {
-      newErrors.gateway = 'Gateway é obrigatório'
-    }
+    
+    // Gateway é opcional - se fornecido, validar formato
+    // Se vazio, RouterOS usará a interface WireGuard como gateway
     
     // Validar formato CIDR para destino
     if (routeForm.destination.trim() && !/^[\d.]+(\/\d+)?$/.test(routeForm.destination.trim())) {
       newErrors.destination = 'Destino deve estar no formato CIDR (ex: 192.168.1.0/24)'
     }
     
-    // Validar IP para gateway
+    // Validar IP para gateway (apenas se fornecido)
     if (routeForm.gateway.trim() && !/^[\d.]+$/.test(routeForm.gateway.trim())) {
       newErrors.gateway = 'Gateway deve ser um endereço IP válido'
     }
@@ -230,7 +230,7 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     try {
       const routeData = {
         destination: routeForm.destination.trim(),
-        gateway: routeForm.gateway.trim(),
+        gateway: routeForm.gateway.trim() || undefined, // Gateway opcional - se vazio, RouterOS usará interface
         interface: routeForm.interface.trim() || undefined,
         distance: routeForm.distance ? parseInt(routeForm.distance) : undefined,
         scope: routeForm.scope ? parseInt(routeForm.scope) : undefined,
@@ -598,23 +598,6 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
 
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Gateway <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="gateway"
-                      value={routeForm.gateway}
-                      onChange={handleRouteFormChange}
-                      className={`input w-full text-sm ${routeErrors.gateway ? 'border-red-500' : ''}`}
-                      placeholder="192.168.1.1"
-                    />
-                    {routeErrors.gateway && (
-                      <p className="mt-1 text-xs text-red-600">{routeErrors.gateway}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
                       Interface {detectingInterface && <span className="text-blue-500 text-xs">(Detectando...)</span>}
                     </label>
                     <input
@@ -690,6 +673,26 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
                             className="input w-full text-sm"
                             placeholder="main"
                           />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Gateway <span className="text-gray-400 text-xs">(opcional)</span>
+                          </label>
+                          <input
+                            type="text"
+                            name="gateway"
+                            value={routeForm.gateway}
+                            onChange={handleRouteFormChange}
+                            className={`input w-full text-sm ${routeErrors.gateway ? 'border-red-500' : ''}`}
+                            placeholder="Deixe vazio para usar interface como gateway"
+                          />
+                          {routeErrors.gateway && (
+                            <p className="mt-1 text-xs text-red-600">{routeErrors.gateway}</p>
+                          )}
+                          <p className="mt-1 text-xs text-gray-500">
+                            Se vazio, RouterOS usará a interface WireGuard como gateway automaticamente
+                          </p>
                         </div>
                       </div>
                     </div>
