@@ -1,4 +1,4 @@
-import { ROUTEROS_WS_URL } from '../config/api'
+import { getRouterOsWsUrlDefault } from '../config/api'
 
 /**
  * Serviço WebSocket para comunicação com o RouterOS WebSocket Service (Python)
@@ -20,7 +20,11 @@ class RouterOsWebSocketService {
    * Conecta ao WebSocket do serviço RouterOS
    * @param {string} wsUrl - URL do WebSocket (padrão: da configuração)
    */
-  async connect(wsUrl = ROUTEROS_WS_URL) {
+  async connect(wsUrl = null) {
+    // Usar URL padrão se não fornecida (evita problema de inicialização)
+    if (!wsUrl) {
+      wsUrl = getRouterOsWsUrlDefault()
+    }
     // Se já está conectado à mesma URL, retornar conexão existente
     if (this.connection?.readyState === WebSocket.OPEN && this.currentUrl === wsUrl) {
       return this.connection

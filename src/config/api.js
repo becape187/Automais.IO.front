@@ -17,9 +17,6 @@ export const SIGNALR_BASE_URL = isProduction
   ? 'https://automais.io:5001/hubs'
   : '/hubs'
 
-// Detectar se a página está sendo carregada via HTTPS
-const isHttps = window.location.protocol === 'https:'
-
 // URL do WebSocket RouterOS (serviço Python)
 // Esta URL é construída dinamicamente baseada no ServerEndpoint da VpnNetwork do router
 // Em produção, sempre usa WSS (WebSocket Secure) diretamente na porta 8765
@@ -56,6 +53,10 @@ export const getRouterOsWsUrl = (serverEndpoint) => {
 }
 
 // URL padrão (para compatibilidade, mas deve ser substituída por getRouterOsWsUrl)
-export const ROUTEROS_WS_URL = isProduction 
-  ? `wss://${window.location.hostname}:8765`
-  : 'ws://localhost:8765'
+// Usar função getter para evitar problemas de inicialização
+export const getRouterOsWsUrlDefault = () => {
+  if (isProduction) {
+    return `wss://${window.location.hostname}:8765`
+  }
+  return 'ws://localhost:8765'
+}
