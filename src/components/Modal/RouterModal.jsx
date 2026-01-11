@@ -33,7 +33,6 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
   const [routeForm, setRouteForm] = useState({
     destination: '',
     gateway: '',
-    interface: '',
     distance: '1',
     scope: '30',
     routingTable: 'main',
@@ -41,7 +40,6 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
   })
   const [routeErrors, setRouteErrors] = useState({})
   const [showAdvanced, setShowAdvanced] = useState(false)
-  const [detectingInterface, setDetectingInterface] = useState(false)
 
   // Carregar redes VPN quando o modal abrir
   useEffect(() => {
@@ -148,7 +146,6 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     setRouteForm({
       destination: '',
       gateway: '',
-      interface: '',
       distance: '1',
       scope: '30',
       routingTable: 'main',
@@ -156,43 +153,6 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     })
     setRouteErrors({})
     setShowAdvanced(false)
-    
-    // Deduzir interface WireGuard automaticamente
-    if (router?.id) {
-      await detectWireGuardInterface()
-    }
-  }
-
-  const detectWireGuardInterface = async () => {
-    if (!router?.id) return
-    
-    setDetectingInterface(true)
-    try {
-      // Buscar interfaces WireGuard do RouterOS
-      const interfaces = await routerStaticRoutesApi.getWireGuardInterfaces(router.id)
-      
-      // Buscar peer WireGuard do router no banco
-      const peersResponse = await api.get(`/routers/${router.id}/wireguard/peers`)
-      const peers = peersResponse.data
-      
-      if (peers && peers.length > 0 && interfaces && interfaces.length > 0) {
-        // Comparar publickey para encontrar a interface correta
-        const routerPublicKey = peers[0].publicKey
-        const matchingInterface = interfaces.find(iface => iface.publicKey === routerPublicKey)
-        
-        if (matchingInterface) {
-          setRouteForm(prev => ({
-            ...prev,
-            interface: matchingInterface.name
-          }))
-        }
-      }
-    } catch (error) {
-      console.error('Erro ao detectar interface WireGuard:', error)
-      // Não bloquear o fluxo, apenas logar o erro
-    } finally {
-      setDetectingInterface(false)
-    }
   }
 
   const handleEditRoute = (route) => {
@@ -200,7 +160,6 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     setRouteForm({
       destination: route.destination || '',
       gateway: route.gateway || '',
-      interface: route.interface || '',
       distance: route.distance?.toString() || '',
       scope: route.scope?.toString() || '',
       routingTable: route.routingTable || '',
@@ -214,7 +173,6 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     setRouteForm({
       destination: '',
       gateway: '',
-      interface: '',
       distance: '1',
       scope: '30',
       routingTable: 'main',
@@ -230,8 +188,8 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
     try {
       const routeData = {
         destination: routeForm.destination.trim(),
-        gateway: routeForm.gateway.trim() || undefined, // Gateway opcional - se vazio, RouterOS usará interface
-        interface: routeForm.interface.trim() || undefined,
+        gateway: routeForm.gateway.trim() || undefined, // Gateway opcional - se vazio, RouterOS detectará interface automaticamente
+        // Interface não é enviada - RouterOS detectará automaticamente quando gateway estiver vazio
         distance: routeForm.distance ? parseInt(routeForm.distance) : undefined,
         scope: routeForm.scope ? parseInt(routeForm.scope) : undefined,
         routingTable: routeForm.routingTable.trim() || undefined,
@@ -594,25 +552,6 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
                     {routeErrors.destination && (
                       <p className="mt-1 text-xs text-red-600">{routeErrors.destination}</p>
                     )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Interface {detectingInterface && <span className="text-blue-500 text-xs">(Detectando...)</span>}
-                    </label>
-                    <input
-                      type="text"
-                      name="interface"
-                      value={routeForm.interface}
-                      onChange={handleRouteFormChange}
-                      className="input w-full text-sm bg-gray-50"
-                      placeholder="Interface WireGuard (detectada automaticamente)"
-                      readOnly
-                      disabled
-                    />
-                    <p className="mt-1 text-xs text-gray-500">
-                      Interface detectada automaticamente comparando publickey do peer WireGuard
-                    </p>
                   </div>
 
                 </div>
