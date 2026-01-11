@@ -1,4 +1,4 @@
-import { getRouterOsWsUrlDefault } from '../config/api'
+import { ROUTEROS_WS_URL } from '../config/api'
 
 /**
  * Serviço WebSocket para comunicação com o RouterOS WebSocket Service (Python)
@@ -20,11 +20,7 @@ class RouterOsWebSocketService {
    * Conecta ao WebSocket do serviço RouterOS
    * @param {string} wsUrl - URL do WebSocket (padrão: da configuração)
    */
-  async connect(wsUrl = null) {
-    // Usar URL padrão se não fornecida (evita problema de inicialização)
-    if (!wsUrl) {
-      wsUrl = getRouterOsWsUrlDefault()
-    }
+  async connect(wsUrl = ROUTEROS_WS_URL) {
     // Se já está conectado à mesma URL, retornar conexão existente
     if (this.connection?.readyState === WebSocket.OPEN && this.currentUrl === wsUrl) {
       return this.connection
@@ -293,21 +289,5 @@ class RouterOsWebSocketService {
   }
 }
 
-// Criar instância singleton (lazy - só quando necessário)
-let _instance = null
-
-function getInstance() {
-  if (!_instance) {
-    _instance = new RouterOsWebSocketService()
-  }
-  return _instance
-}
-
-// Exportar como objeto proxy para manter compatibilidade com código existente
-export const routerOsWebSocketService = new Proxy({}, {
-  get(target, prop) {
-    const instance = getInstance()
-    const value = instance[prop]
-    return typeof value === 'function' ? value.bind(instance) : value
-  }
-})
+// Exportar instância singleton
+export const routerOsWebSocketService = new RouterOsWebSocketService()
