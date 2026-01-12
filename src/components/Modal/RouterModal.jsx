@@ -41,6 +41,22 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
   const [routeErrors, setRouteErrors] = useState({})
   const [showAdvanced, setShowAdvanced] = useState(false)
 
+  // Definir loadRoutes ANTES dos useEffect que a usam (evita erro de inicialização)
+  const loadRoutes = useCallback(async () => {
+    if (!router?.id) return
+    
+    try {
+      setLoadingRoutes(true)
+      const routesData = await routerStaticRoutesApi.getByRouter(router.id)
+      setRoutes(routesData || [])
+    } catch (error) {
+      console.error('Erro ao carregar rotas:', error)
+      setRoutes([])
+    } finally {
+      setLoadingRoutes(false)
+    }
+  }, [router?.id])
+
   // Carregar redes VPN quando o modal abrir
   useEffect(() => {
     if (isOpen) {
@@ -50,7 +66,7 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
         loadRoutes()
       }
     }
-  }, [isOpen, isEditing, router?.id])
+  }, [isOpen, isEditing, router?.id, loadRoutes])
 
   // Polling automático para rotas com erro ou pendentes de remoção
   useEffect(() => {
@@ -116,21 +132,6 @@ export default function RouterModal({ isOpen, onClose, router = null }) {
       setLoadingVpnNetworks(false)
     }
   }
-
-  const loadRoutes = useCallback(async () => {
-    if (!router?.id) return
-    
-    try {
-      setLoadingRoutes(true)
-      const routesData = await routerStaticRoutesApi.getByRouter(router.id)
-      setRoutes(routesData || [])
-    } catch (error) {
-      console.error('Erro ao carregar rotas:', error)
-      setRoutes([])
-    } finally {
-      setLoadingRoutes(false)
-    }
-  }, [router?.id])
 
   const handleRouteFormChange = (e) => {
     const { name, value } = e.target
