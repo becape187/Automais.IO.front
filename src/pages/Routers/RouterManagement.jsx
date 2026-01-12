@@ -20,8 +20,7 @@ import {
 } from 'lucide-react'
 import api from '../../services/api'
 import { routersApi } from '../../services/routersApi'
-// TEMPORARIAMENTE DESABILITADO PARA TESTE
-// import { routerOsWebSocketService } from '../../services/routerosWebSocketService'
+import { routerOsWebSocketService } from '../../services/routerosWebSocketService'
 import clsx from 'clsx'
 import Modal from '../../components/Modal/Modal'
 
@@ -64,12 +63,11 @@ export default function RouterManagement() {
   useEffect(() => {
     loadRouterData()
     return () => {
-      // TEMPORARIAMENTE DESABILITADO PARA TESTE
       // Desconectar WebSocket ao desmontar componente
-      // if (wsConnectedRef.current) {
-      //   routerOsWebSocketService.disconnect()
-      //   wsConnectedRef.current = false
-      // }
+      if (wsConnectedRef.current) {
+        routerOsWebSocketService.disconnect()
+        wsConnectedRef.current = false
+      }
     }
   }, [routerId])
 
@@ -112,17 +110,16 @@ export default function RouterManagement() {
       setLoading(true)
       setError(null)
 
-      // TEMPORARIAMENTE DESABILITADO PARA TESTE
       // Conectar ao WebSocket via API C# usando routerId
       // A API C# fará o proxy para o routeros.io Python baseado no ServerEndpoint da VpnNetwork
-      // if (!routerOsWebSocketService.isConnected() || routerOsWebSocketService.getCurrentRouterId() !== routerId) {
-      //   // Desconectar se já estava conectado a um router diferente
-      //   if (routerOsWebSocketService.isConnected()) {
-      //     await routerOsWebSocketService.disconnect()
-      //   }
-      //   await routerOsWebSocketService.connect(routerId)
-      //   wsConnectedRef.current = true
-      // }
+      if (!routerOsWebSocketService.isConnected() || routerOsWebSocketService.getCurrentRouterId() !== routerId) {
+        // Desconectar se já estava conectado a um router diferente
+        if (routerOsWebSocketService.isConnected()) {
+          await routerOsWebSocketService.disconnect()
+        }
+        await routerOsWebSocketService.connect(routerId)
+        wsConnectedRef.current = true
+      }
 
       // Obter IP do router
       const routerIp = getRouterIp(routerData)
@@ -130,17 +127,8 @@ export default function RouterManagement() {
         throw new Error('IP do router não encontrado. Configure RouterOsApiUrl ou crie um peer WireGuard.')
       }
 
-      // TEMPORARIAMENTE DESABILITADO PARA TESTE
       // Obter status via WebSocket
-      // const status = await routerOsWebSocketService.getStatus(routerId, routerIp)
-      
-      // Mock de status para teste (sem WebSocket)
-      const status = {
-        connected: false,
-        success: false,
-        router_ip: routerIp,
-        error: 'WebSocket temporariamente desabilitado para teste'
-      }
+      const status = await routerOsWebSocketService.getStatus(routerId, routerIp)
       
       setConnectionStatus({
         connected: status.connected || false,
@@ -213,22 +201,14 @@ export default function RouterManagement() {
           return
       }
 
-      // TEMPORARIAMENTE DESABILITADO PARA TESTE
       // Executar comando via WebSocket
-      // const result = await routerOsWebSocketService.executeCommand(
-      //   routerId,
-      //   routerIp,
-      //   username,
-      //   password,
-      //   command
-      // )
-      
-      // Mock de resultado para teste (sem WebSocket)
-      const result = {
-        success: false,
-        error: 'WebSocket temporariamente desabilitado para teste',
-        data: []
-      }
+      const result = await routerOsWebSocketService.executeCommand(
+        routerId,
+        routerIp,
+        username,
+        password,
+        command
+      )
 
       // Processar resultado
       if (result.success !== false && result.data) {
@@ -350,22 +330,14 @@ export default function RouterManagement() {
       const username = router.routerOsApiUsername || 'admin'
       const password = router.routerOsApiPassword || ''
 
-      // TEMPORARIAMENTE DESABILITADO PARA TESTE
       // Executar comando via WebSocket
-      // const result = await routerOsWebSocketService.executeCommand(
-      //   routerId,
-      //   routerIp,
-      //   username,
-      //   password,
-      //   terminalCommand
-      // )
-      
-      // Mock de resultado para teste (sem WebSocket)
-      const result = {
-        success: false,
-        error: 'WebSocket temporariamente desabilitado para teste',
-        data: []
-      }
+      const result = await routerOsWebSocketService.executeCommand(
+        routerId,
+        routerIp,
+        username,
+        password,
+        terminalCommand
+      )
 
       const formattedResult = formatTerminalResult(result.data || result)
 
@@ -471,21 +443,13 @@ export default function RouterManagement() {
     const username = router.routerOsApiUsername || 'admin'
     const password = router.routerOsApiPassword || ''
 
-    // TEMPORARIAMENTE DESABILITADO PARA TESTE
-    // return await routerOsWebSocketService.executeCommand(
-    //   routerId,
-    //   routerIp,
-    //   username,
-    //   password,
-    //   command
-    // )
-    
-    // Mock de resultado para teste (sem WebSocket)
-    return {
-      success: false,
-      error: 'WebSocket temporariamente desabilitado para teste',
-      data: []
-    }
+    return await routerOsWebSocketService.executeCommand(
+      routerId,
+      routerIp,
+      username,
+      password,
+      command
+    )
   }
 
   const handleEnableItem = async () => {
