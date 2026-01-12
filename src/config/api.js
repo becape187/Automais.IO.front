@@ -35,9 +35,19 @@ export function getApiBaseUrl() {
     : '/api'
 }
 
-// Exportar como constante (calculado na primeira importação)
-// getApiBaseUrl() é seguro pois verifica window antes de usar
-export const API_BASE_URL = getApiBaseUrl()
+// Exportar como constante - cálculo direto sem funções intermediárias
+// Verificação inline para evitar problemas de inicialização
+export const API_BASE_URL = (() => {
+  if (typeof window === 'undefined') return '/api'
+  try {
+    const hostname = window.location.hostname
+    return (hostname === 'automais.io' || hostname === 'www.automais.io')
+      ? 'https://automais.io:5001/api'
+      : '/api'
+  } catch {
+    return '/api'
+  }
+})()
 
 // URL base para SignalR
 export function getSignalRBaseUrl() {
@@ -46,8 +56,18 @@ export function getSignalRBaseUrl() {
     : '/hubs'
 }
 
-// Exportar como constante (calculado na primeira importação)
-export const SIGNALR_BASE_URL = getSignalRBaseUrl()
+// Exportar como constante - cálculo direto sem funções intermediárias
+export const SIGNALR_BASE_URL = (() => {
+  if (typeof window === 'undefined') return '/hubs'
+  try {
+    const hostname = window.location.hostname
+    return (hostname === 'automais.io' || hostname === 'www.automais.io')
+      ? 'https://automais.io:5001/hubs'
+      : '/hubs'
+  } catch {
+    return '/hubs'
+  }
+})()
 
 // Função auxiliar para detectar se está em HTTPS
 function getIsHttps() {

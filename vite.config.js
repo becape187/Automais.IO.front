@@ -24,5 +24,14 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    minify: 'esbuild', // Usar esbuild ao invés de terser (mais rápido e menos problemas)
+    rollupOptions: {
+      output: {
+        // Manter nomes de variáveis mais legíveis para debug
+        manualChunks: undefined,
+      },
+    },
+  },
 })
 
