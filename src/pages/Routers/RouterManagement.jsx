@@ -71,36 +71,6 @@ export default function RouterManagement() {
     }
   }, [routerId])
 
-  // Atualizar status do sistema a cada 1 segundo
-  useEffect(() => {
-    if (!connectionStatus?.connected || !router) return
-
-    const intervalId = setInterval(() => {
-      refreshSystemInfo()
-    }, 1000) // Atualizar a cada 1 segundo
-
-    return () => {
-      clearInterval(intervalId)
-    }
-  }, [connectionStatus?.connected, router, refreshSystemInfo])
-
-  // Atualizar dados da aba ativa a cada 1 segundo
-  useEffect(() => {
-    if (!connectionStatus?.connected || !router) return
-
-    // Carregar dados imediatamente (com loading)
-    loadTabData(true)
-
-    const intervalId = setInterval(() => {
-      // Atualizar sem mostrar loading (atualização silenciosa)
-      loadTabData(false)
-    }, 1000) // Atualizar a cada 1 segundo
-
-    return () => {
-      clearInterval(intervalId)
-    }
-  }, [activeTab, connectionStatus?.connected, router, loadTabData])
-
   const loadRouterData = async () => {
     try {
       const routerData = await routersApi.getById(routerId)
@@ -200,6 +170,7 @@ export default function RouterManagement() {
     }
   }
 
+  // Função para atualizar status do sistema (usada tanto no useEffect quanto no botão)
   const refreshSystemInfo = useCallback(async () => {
     // Recarregar status (que já traz informações do sistema)
     // Não mostrar loading durante atualizações automáticas
@@ -243,6 +214,20 @@ export default function RouterManagement() {
     }
   }, [connectionStatus?.connected, connectionStatus?.routerIp, router, routerId])
 
+  // Atualizar status do sistema a cada 1 segundo
+  useEffect(() => {
+    if (!connectionStatus?.connected || !router) return
+
+    const intervalId = setInterval(() => {
+      refreshSystemInfo()
+    }, 1000) // Atualizar a cada 1 segundo
+
+    return () => {
+      clearInterval(intervalId)
+    }
+  }, [connectionStatus?.connected, router, refreshSystemInfo])
+
+  // Função para carregar dados da aba (usada tanto no useEffect quanto em outras funções)
   const loadTabData = useCallback(async (showLoading = true) => {
     if (!connectionStatus?.connected || !router) return
 
@@ -327,6 +312,23 @@ export default function RouterManagement() {
       }
     }
   }, [activeTab, connectionStatus?.connected, connectionStatus?.routerIp, router, routerId])
+
+  // Atualizar dados da aba ativa a cada 1 segundo
+  useEffect(() => {
+    if (!connectionStatus?.connected || !router) return
+
+    // Carregar dados imediatamente (com loading)
+    loadTabData(true)
+
+    const intervalId = setInterval(() => {
+      // Atualizar sem mostrar loading (atualização silenciosa)
+      loadTabData(false)
+    }, 1000) // Atualizar a cada 1 segundo
+
+    return () => {
+      clearInterval(intervalId)
+    }
+  }, [activeTab, connectionStatus?.connected, router, loadTabData])
 
   const formatTerminalResult = (data) => {
     // Se for um objeto com 'data' ou 'result', formatar como tabela do Winbox
