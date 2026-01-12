@@ -219,6 +219,44 @@ class RouterOsWebSocketService {
   }
 
   /**
+   * Sanitiza string para remover bytes UTF-8 inválidos
+   */
+  sanitizeString(str) {
+    if (typeof str !== 'string') {
+      return String(str)
+    }
+    
+    // Remover caracteres de controle e bytes UTF-8 inválidos
+    return str
+      .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, '')
+      .replace(/[\xC0-\xC1\xF5-\xFF]/g, '')
+      .replace(/\xC2[\x00-\x7F]/g, '')
+      .replace(/\xC3[\x00-\x7F]/g, '')
+      .replace(/\xC9[\x00-\x7F]/g, '')
+      .split('')
+      .map(char => {
+        const code = char.charCodeAt(0)
+        if (code >= 32 && code <= 126) {
+          return char // ASCII imprimível
+        } else if (code >= 160 && code <= 255) {
+          try {
+            return String.fromCharCode(code)
+          } catch {
+            return '?'
+          }
+        } else if (code > 255) {
+          try {
+            return char
+          } catch {
+            return '?'
+          }
+        }
+        return ''
+      })
+      .join('')
+  }
+
+  /**
    * Processa mensagens recebidas
    */
   handleMessage(data) {
@@ -229,7 +267,9 @@ class RouterOsWebSocketService {
       this.pendingRequests.delete(data.id)
 
       if (data.error || data.success === false) {
-        reject(new Error(data.error || 'Erro desconhecido'))
+        // Sanitizar a mensagem de erro antes de criar o Error
+        const errorMessage = this.sanitizeString(data.error || 'Erro desconhecido')
+        reject(new Error(errorMessage))
       } else {
         resolve(data)
       }
