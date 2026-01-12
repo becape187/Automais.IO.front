@@ -91,12 +91,19 @@ export default function RouterManagement() {
   const getRouterIp = (routerData) => {
     // Tentar obter do RouterOsApiUrl
     if (routerData?.routerOsApiUrl) {
-      const parts = routerData.routerOsApiUrl.split(':')
+      // Remover protocolo se presente (http:// ou https://)
+      let url = routerData.routerOsApiUrl.replace(/^https?:\/\//, '')
+      // Pegar apenas o hostname/IP (antes de : ou /)
+      const parts = url.split(':')
       if (parts.length > 0 && parts[0]) {
-        return parts[0].trim()
+        const ip = parts[0].split('/')[0].trim()
+        if (ip) {
+          return ip
+        }
       }
     }
     // Se não tiver, tentar buscar do peer WireGuard (seria necessário buscar via API)
+    // Por enquanto, retornar null e deixar o backend buscar do peer WireGuard
     return null
   }
 
@@ -121,13 +128,10 @@ export default function RouterManagement() {
         wsConnectedRef.current = true
       }
 
-      // Obter IP do router
+      // Obter IP do router (pode ser null - o backend buscará do peer WireGuard se necessário)
       const routerIp = getRouterIp(routerData)
-      if (!routerIp) {
-        throw new Error('IP do router não encontrado. Configure RouterOsApiUrl ou crie um peer WireGuard.')
-      }
 
-      // Obter status via WebSocket
+      // Obter status via WebSocket (routerIp pode ser null - backend buscará se necessário)
       const status = await routerOsWebSocketService.getStatus(routerId, routerIp)
       
       setConnectionStatus({
