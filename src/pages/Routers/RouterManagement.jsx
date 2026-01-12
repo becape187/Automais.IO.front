@@ -134,10 +134,19 @@ export default function RouterManagement() {
       // Obter status via WebSocket (routerIp pode ser null - backend buscará se necessário)
       const status = await routerOsWebSocketService.getStatus(routerId, routerIp)
       
+      // O backend retorna router_ip na resposta quando busca do peer WireGuard
+      const finalRouterIp = status.router_ip || routerIp
+      console.log('Status recebido:', { 
+        connected: status.connected, 
+        router_ip: status.router_ip, 
+        routerIp_inicial: routerIp,
+        routerIp_final: finalRouterIp 
+      })
+      
       setConnectionStatus({
         connected: status.connected || false,
         success: status.success || false,
-        routerIp: status.router_ip || routerIp,
+        routerIp: finalRouterIp,
         identity: status.identity,
         resource: status.resource,
         error: status.error
@@ -179,9 +188,13 @@ export default function RouterManagement() {
       setLoading(true)
       setError(null)
 
-      const routerIp = getRouterIp(router)
+      // Usar routerIp do connectionStatus (já foi buscado pelo backend se necessário)
+      const routerIp = connectionStatus.routerIp || getRouterIp(router)
       if (!routerIp) {
-        throw new Error('IP do router não encontrado')
+        // Se não tem routerIp, tentar buscar novamente do status
+        console.warn('routerIp não encontrado, tentando buscar do status novamente...')
+        setError('Aguardando IP do router...')
+        return
       }
 
       const username = router.routerOsApiUsername || 'admin'
@@ -326,7 +339,8 @@ export default function RouterManagement() {
       setExecutingCommand(true)
       setError(null)
 
-      const routerIp = getRouterIp(router)
+      // Usar routerIp do connectionStatus (já foi buscado pelo backend se necessário)
+      const routerIp = connectionStatus?.routerIp || getRouterIp(router)
       if (!routerIp) {
         throw new Error('IP do router não encontrado')
       }
@@ -439,7 +453,8 @@ export default function RouterManagement() {
   const executeRouterCommand = async (command) => {
     if (!router) throw new Error('Dados do router não disponíveis')
 
-    const routerIp = getRouterIp(router)
+    // Usar routerIp do connectionStatus (já foi buscado pelo backend se necessário)
+    const routerIp = connectionStatus?.routerIp || getRouterIp(router)
     if (!routerIp) {
       throw new Error('IP do router não encontrado')
     }
