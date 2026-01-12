@@ -60,10 +60,77 @@ class RouterOsWebSocketService {
 
         this.connection.onmessage = (event) => {
           try {
-            const data = JSON.parse(event.data)
+            // Tentar parsear JSON normalmente
+            let data
+            let rawData = event.data
+            
+            // Se for uma string, tentar corrigir problemas de codificação UTF-8 antes de parsear
+            if (typeof rawData === 'string') {
+              // Remover caracteres de controle e bytes inválidos UTF-8
+              // Substituir sequências UTF-8 malformadas por espaços
+              rawData = rawData.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, '')
+              
+              // Tentar corrigir bytes UTF-8 malformados (como 0xc3, 0xc9 seguidos de bytes inválidos)
+              // Esses bytes são o início de caracteres UTF-8 de 2 bytes, mas o segundo byte está faltando ou inválido
+              rawData = rawData.replace(/[\xC0-\xC1\xF5-\xFF]/g, '') // Bytes inválidos UTF-8
+              rawData = rawData.replace(/\xC2[\x00-\x7F]/g, '') // Sequências malformadas começando com 0xC2
+              rawData = rawData.replace(/\xC3[\x00-\x7F]/g, '') // Sequências malformadas começando com 0xC3
+              rawData = rawData.replace(/\xC9[\x00-\x7F]/g, '') // Sequências malformadas começando com 0xC9
+            }
+            
+            try {
+              data = JSON.parse(rawData)
+            } catch (parseError) {
+              // Se ainda falhar, tentar uma abordagem mais agressiva
+              console.warn('Erro ao parsear JSON após correção básica, tentando correção avançada:', parseError.message)
+              
+              if (typeof rawData === 'string') {
+                // Remover todos os caracteres não-ASCII problemáticos e manter apenas ASCII seguro
+                // Isso pode perder alguns dados, mas pelo menos não quebra a aplicação
+                let safeData = rawData
+                  .split('')
+                  .map(char => {
+                    const code = char.charCodeAt(0)
+                    // Manter apenas caracteres ASCII imprimíveis e alguns caracteres Unicode seguros
+                    if (code >= 32 && code <= 126) {
+                      return char // ASCII imprimível
+                    } else if (code >= 160 && code <= 255) {
+                      // Caracteres Latin-1, tentar manter
+                      try {
+                        return String.fromCharCode(code)
+                      } catch {
+                        return '?'
+                      }
+                    } else if (code > 255) {
+                      // Unicode, tentar manter
+                      try {
+                        return char
+                      } catch {
+                        return '?'
+                      }
+                    }
+                    return '' // Remover caracteres de controle
+                  })
+                  .join('')
+                
+                try {
+                  data = JSON.parse(safeData)
+                  console.warn('JSON parseado após correção agressiva (alguns dados podem ter sido perdidos)')
+                } catch (e) {
+                  console.error('Não foi possível corrigir a mensagem JSON mesmo após correção agressiva:', e)
+                  // Ignorar a mensagem problemática para não quebrar a aplicação
+                  return
+                }
+              } else {
+                console.error('Dados não são string, não é possível corrigir:', typeof rawData)
+                return
+              }
+            }
+            
             this.handleMessage(data)
           } catch (error) {
             console.error('Erro ao processar mensagem WebSocket:', error)
+            // Não emitir erro para não quebrar a aplicação, apenas logar
           }
         }
 
