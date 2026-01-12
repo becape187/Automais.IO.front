@@ -77,14 +77,18 @@ class RouterOsWebSocketService {
           console.log('RouterOS WebSocket fechado:', event.code, event.reason)
           this.emit('disconnected', event)
           
-          // Tentar reconectar se não foi fechado intencionalmente
-          if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
+          // Tentar reconectar se não foi fechado intencionalmente e temos routerId
+          if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts && this.currentRouterId) {
             this.reconnectAttempts++
             const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1)
             console.log(`Tentando reconectar em ${delay}ms... (tentativa ${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
             setTimeout(() => {
-              this.connect(this.currentRouterId).catch(console.error)
+              if (this.currentRouterId) {
+                this.connect(this.currentRouterId).catch(console.error)
+              }
             }, delay)
+          } else if (!this.currentRouterId) {
+            console.warn('Não é possível reconectar: routerId não disponível')
           }
         }
       } catch (error) {
