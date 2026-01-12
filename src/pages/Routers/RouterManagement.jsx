@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, 
@@ -71,11 +71,35 @@ export default function RouterManagement() {
     }
   }, [routerId])
 
+  // Atualizar status do sistema a cada 1 segundo
   useEffect(() => {
-    if (connectionStatus?.connected && router) {
-      loadTabData()
+    if (!connectionStatus?.connected || !router) return
+
+    const intervalId = setInterval(() => {
+      refreshSystemInfo()
+    }, 1000) // Atualizar a cada 1 segundo
+
+    return () => {
+      clearInterval(intervalId)
     }
-  }, [activeTab, connectionStatus, router])
+  }, [connectionStatus?.connected, router, refreshSystemInfo])
+
+  // Atualizar dados da aba ativa a cada 1 segundo
+  useEffect(() => {
+    if (!connectionStatus?.connected || !router) return
+
+    // Carregar dados imediatamente (com loading)
+    loadTabData(true)
+
+    const intervalId = setInterval(() => {
+      // Atualizar sem mostrar loading (atualização silenciosa)
+      loadTabData(false)
+    }, 1000) // Atualizar a cada 1 segundo
+
+    return () => {
+      clearInterval(intervalId)
+    }
+  }, [activeTab, connectionStatus?.connected, router, loadTabData])
 
   const loadRouterData = async () => {
     try {
@@ -176,16 +200,56 @@ export default function RouterManagement() {
     }
   }
 
-  const refreshSystemInfo = async () => {
+  const refreshSystemInfo = useCallback(async () => {
     // Recarregar status (que já traz informações do sistema)
-    await checkConnection()
-  }
+    // Não mostrar loading durante atualizações automáticas
+    if (!connectionStatus?.connected || !router) return
+    
+    try {
+      const routerIp = connectionStatus.routerIp || getRouterIp(router)
+      if (!routerIp) return
 
-  const loadTabData = async () => {
+      // Obter status via WebSocket
+      const status = await routerOsWebSocketService.getStatus(routerId, routerIp)
+      
+      // Atualizar connectionStatus com novos dados
+      setConnectionStatus(prev => ({
+        ...prev,
+        routerIp: status.router_ip || prev.routerIp,
+        identity: status.identity || prev.identity,
+        resource: status.resource || prev.resource,
+        error: status.error
+      }))
+      
+      // Atualizar informações do sistema se conectado
+      if (status.connected && status.resource) {
+        const resource = status.resource
+        setSystemInfo({
+          model: resource['board-name'] || resource['board-name'] || '-',
+          serialNumber: router?.serialNumber || '-',
+          firmwareVersion: resource.version || '-',
+          hardwareInfo: {
+            cpuLoad: resource['cpu-load'] || resource['cpu-load'] || '-',
+            memoryUsage: resource['free-memory'] && resource['total-memory'] 
+              ? `${Math.round((1 - resource['free-memory'] / resource['total-memory']) * 100)}%`
+              : '-',
+            uptime: resource.uptime || '-'
+          }
+        })
+      }
+    } catch (err) {
+      // Silenciar erros durante atualizações automáticas para não poluir a UI
+      console.warn('Erro ao atualizar status do sistema:', err)
+    }
+  }, [connectionStatus?.connected, connectionStatus?.routerIp, router, routerId])
+
+  const loadTabData = useCallback(async (showLoading = true) => {
     if (!connectionStatus?.connected || !router) return
 
     try {
-      setLoading(true)
+      if (showLoading) {
+        setLoading(true)
+      }
       setError(null)
 
       // Usar routerIp do connectionStatus (já foi buscado pelo backend se necessário)
@@ -193,7 +257,9 @@ export default function RouterManagement() {
       if (!routerIp) {
         // Se não tem routerIp, tentar buscar novamente do status
         console.warn('routerIp não encontrado, tentando buscar do status novamente...')
-        setError('Aguardando IP do router...')
+        if (showLoading) {
+          setError('Aguardando IP do router...')
+        }
         return
       }
 
@@ -249,11 +315,18 @@ export default function RouterManagement() {
         throw new Error(result.error || 'Erro ao executar comando')
       }
     } catch (err) {
-      setError(err.message || 'Erro ao carregar dados')
+      // Só mostrar erro se não for atualização automática silenciosa
+      if (showLoading) {
+        setError(err.message || 'Erro ao carregar dados')
+      } else {
+        console.warn('Erro ao atualizar dados da aba:', err)
+      }
     } finally {
-      setLoading(false)
+      if (showLoading) {
+        setLoading(false)
+      }
     }
-  }
+  }, [activeTab, connectionStatus?.connected, connectionStatus?.routerIp, router, routerId])
 
   const formatTerminalResult = (data) => {
     // Se for um objeto com 'data' ou 'result', formatar como tabela do Winbox
