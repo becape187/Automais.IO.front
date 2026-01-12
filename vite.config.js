@@ -26,6 +26,7 @@ export default defineConfig({
   },
   build: {
     minify: 'esbuild', // Usar esbuild ao invés de terser (mais rápido e menos problemas)
+    sourcemap: true, // Manter sourcemaps para debug
     rollupOptions: {
       output: {
         // Manter nomes de variáveis mais legíveis para debug
