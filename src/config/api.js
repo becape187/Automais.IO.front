@@ -1,9 +1,15 @@
 // Configuração da API
 // Detecta automaticamente se está em produção ou desenvolvimento
 
-export const isProduction = 
-  window.location.hostname === 'automais.io' || 
-  window.location.hostname === 'www.automais.io'
+// Função para verificar se está em produção (lazy evaluation para evitar problemas de inicialização)
+const checkIsProduction = () => {
+  if (typeof window === 'undefined') return false
+  const hostname = window.location.hostname
+  return hostname === 'automais.io' || hostname === 'www.automais.io'
+}
+
+// Exportar como getter para evitar problemas de inicialização
+export const isProduction = checkIsProduction()
 
 // URL base da API
 // Em produção: HTTPS direto na porta 5001 (sem nginx)
@@ -17,16 +23,22 @@ export const SIGNALR_BASE_URL = isProduction
   ? 'https://automais.io:5001/hubs'
   : '/hubs'
 
+// Função auxiliar para detectar se está em HTTPS
+const getIsHttps = () => {
+  if (typeof window === 'undefined') return false
+  return window.location.protocol === 'https:'
+}
+
+// Função auxiliar para obter protocolo WebSocket
+const getWsProtocol = () => {
+  return getIsHttps() ? 'wss://' : 'ws://'
+}
+
 // URL do WebSocket RouterOS (via API C# como proxy)
 // A API C# faz proxy para o servidor routeros.io Python baseado no routerId
 // IMPORTANTE: Detecta automaticamente se deve usar ws:// ou wss:// baseado no protocolo da página
 // Função para construir URL do WebSocket na API C# baseada no routerId
 export const getRouterOsWsUrl = (routerId) => {
-  // Detectar se a página está em HTTPS para usar wss:// (WebSocket seguro)
-  // Páginas HTTPS não podem conectar a WebSockets inseguros (ws://)
-  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
-  const wsProtocol = isHttps ? 'wss://' : 'ws://'
-  
   if (!routerId) {
     throw new Error('routerId é obrigatório para conectar ao WebSocket RouterOS')
   }
@@ -34,6 +46,7 @@ export const getRouterOsWsUrl = (routerId) => {
   // Construir URL do WebSocket na API C#: /api/ws/routeros/{routerId}
   // A API C# fará o proxy para o routeros.io Python baseado no ServerEndpoint da VpnNetwork
   const wsPath = `/api/ws/routeros/${routerId}`
+  const wsProtocol = getWsProtocol()
   
   if (isProduction) {
     // Em produção, usar o mesmo host da API
@@ -46,8 +59,7 @@ export const getRouterOsWsUrl = (routerId) => {
 
 // URL padrão (para compatibilidade, mas deve ser substituída por getRouterOsWsUrl)
 // Detecta automaticamente se deve usar ws:// ou wss:// baseado no protocolo da página
-const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
-const defaultWsProtocol = isHttps ? 'wss://' : 'ws://'
+const defaultWsProtocol = getWsProtocol()
 export const ROUTEROS_WS_URL = isProduction 
   ? `${defaultWsProtocol}automais.io:5001/api/ws/routeros`
   : `${defaultWsProtocol}localhost:5000/api/ws/routeros`
