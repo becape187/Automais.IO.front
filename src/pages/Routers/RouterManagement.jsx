@@ -176,11 +176,25 @@ export default function RouterManagement() {
     // Não mostrar loading durante atualizações automáticas
     if (!connectionStatus?.connected || !router) return
     
+    // Verificar se WebSocket está conectado antes de tentar
+    if (!routerOsWebSocketService.isConnected()) {
+      console.warn('[RouterManagement] WebSocket não conectado, pulando atualização de status')
+      // Tentar reconectar se tiver routerId
+      if (routerId && !routerOsWebSocketService.getState().includes('CONNECTING')) {
+        try {
+          await routerOsWebSocketService.connect(routerId)
+        } catch (err) {
+          console.warn('[RouterManagement] Erro ao tentar reconectar:', err)
+        }
+      }
+      return
+    }
+    
     try {
       const routerIp = connectionStatus.routerIp || getRouterIp(router)
       if (!routerIp) return
 
-      // Obter status via WebSocket
+      // Obter status via WebSocket (com timeout curto para não bloquear)
       const status = await routerOsWebSocketService.getStatus(routerId, routerIp)
       
       // Atualizar connectionStatus com novos dados
@@ -210,17 +224,39 @@ export default function RouterManagement() {
       }
     } catch (err) {
       // Silenciar erros durante atualizações automáticas para não poluir a UI
-      console.warn('Erro ao atualizar status do sistema:', err)
+      // Mas logar para diagnóstico
+      if (err.message?.includes('WebSocket não está conectado') || err.message?.includes('Timeout')) {
+        console.warn('[RouterManagement] WebSocket desconectado ou timeout durante atualização de status:', err.message)
+        // Atualizar status de conexão
+        setConnectionStatus(prev => ({
+          ...prev,
+          connected: false,
+          error: err.message || 'WebSocket desconectado'
+        }))
+        
+        // Tentar reconectar se foi timeout
+        if (err.message?.includes('Timeout') && routerId) {
+          console.log('[RouterManagement] Tentando reconectar após timeout...')
+          try {
+            routerOsWebSocketService.forceDisconnect()
+            await routerOsWebSocketService.connect(routerId, true)
+          } catch (reconnectErr) {
+            console.warn('[RouterManagement] Erro ao reconectar:', reconnectErr)
+          }
+        }
+      } else {
+        console.warn('[RouterManagement] Erro ao atualizar status do sistema:', err.message || err)
+      }
     }
   }, [connectionStatus?.connected, connectionStatus?.routerIp, router, routerId])
 
-  // Atualizar status do sistema a cada 1 segundo
+  // Atualizar status do sistema a cada 5 segundos (reduzido de 1s para evitar sobrecarga)
   useEffect(() => {
     if (!connectionStatus?.connected || !router) return
 
     const intervalId = setInterval(() => {
       refreshSystemInfo()
-    }, 1000) // Atualizar a cada 1 segundo
+    }, 5000) // Atualizar a cada 5 segundos (reduzido para evitar sobrecarga)
 
     return () => {
       clearInterval(intervalId)

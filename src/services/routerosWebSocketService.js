@@ -14,26 +14,39 @@ class RouterOsWebSocketService {
     this.reconnectAttempts = 0
     this.maxReconnectAttempts = 5
     this.reconnectDelay = 1000
+    this.connectionTimeout = 10000 // 10 segundos para conectar
+    this.heartbeatInterval = null
+    this.heartbeatIntervalMs = 30000 // 30 segundos
+    this.lastPongTime = null
+    this.isReconnecting = false
+    this.connectPromise = null
   }
 
   /**
    * Conecta ao WebSocket do serviço RouterOS via API C#
    * @param {string} routerId - ID do router (obrigatório)
+   * @param {boolean} forceReconnect - Forçar reconexão mesmo se já estiver conectado
    */
-  async connect(routerId) {
+  async connect(routerId, forceReconnect = false) {
     if (!routerId) {
       throw new Error('routerId é obrigatório para conectar ao WebSocket RouterOS')
     }
 
+    // Se já está conectando, aguardar a conexão existente
+    if (this.connectPromise && !forceReconnect) {
+      return this.connectPromise
+    }
+
     const wsUrl = getRouterOsWsUrl(routerId)
+    
     // Se já está conectado ao mesmo router, retornar conexão existente
-    if (this.connection?.readyState === WebSocket.OPEN && this.currentRouterId === routerId) {
+    if (!forceReconnect && this.connection?.readyState === WebSocket.OPEN && this.currentRouterId === routerId) {
       return this.connection
     }
 
-    if (this.connection?.readyState === WebSocket.CONNECTING) {
-      // Aguardar conexão existente
-      return new Promise((resolve, reject) => {
+    // Se está conectando, aguardar
+    if (!forceReconnect && this.connection?.readyState === WebSocket.CONNECTING) {
+      return this.connectPromise || new Promise((resolve, reject) => {
         const checkConnection = setInterval(() => {
           if (this.connection?.readyState === WebSocket.OPEN) {
             clearInterval(checkConnection)
@@ -43,18 +56,55 @@ class RouterOsWebSocketService {
             reject(new Error('Falha ao conectar'))
           }
         }, 100)
+        
+        // Timeout de 10 segundos
+        setTimeout(() => {
+          clearInterval(checkConnection)
+          reject(new Error('Timeout ao aguardar conexão'))
+        }, this.connectionTimeout)
       })
     }
 
-    return new Promise((resolve, reject) => {
+    // Fechar conexão existente se necessário
+    if (this.connection && (forceReconnect || this.currentRouterId !== routerId)) {
       try {
+        this.connection.close()
+      } catch (e) {
+        console.warn('Erro ao fechar conexão existente:', e)
+      }
+      this.connection = null
+    }
+
+    this.isReconnecting = true
+    this.connectPromise = new Promise((resolve, reject) => {
+      const connectionTimeout = setTimeout(() => {
+        if (this.connection?.readyState !== WebSocket.OPEN) {
+          try {
+            this.connection?.close()
+          } catch (e) {
+            // Ignorar erro ao fechar
+          }
+          this.connection = null
+          this.connectPromise = null
+          this.isReconnecting = false
+          reject(new Error(`Timeout ao conectar WebSocket após ${this.connectionTimeout}ms`))
+        }
+      }, this.connectionTimeout)
+
+      try {
+        console.log(`[WebSocket] Conectando ao router ${routerId}...`)
         this.connection = new WebSocket(wsUrl)
 
         this.connection.onopen = () => {
-          console.log('RouterOS WebSocket conectado para router', routerId)
+          clearTimeout(connectionTimeout)
+          console.log(`[WebSocket] ✅ Conectado ao router ${routerId}`)
           this.currentRouterId = routerId
           this.reconnectAttempts = 0
+          this.isReconnecting = false
+          this.lastPongTime = Date.now()
+          this.startHeartbeat()
           this.emit('connected')
+          this.connectPromise = null
           resolve(this.connection)
         }
 
@@ -135,45 +185,161 @@ class RouterOsWebSocketService {
         }
 
         this.connection.onerror = (error) => {
-          console.error('Erro no WebSocket RouterOS:', error)
+          clearTimeout(connectionTimeout)
+          console.error(`[WebSocket] ❌ Erro no WebSocket RouterOS (router ${routerId}):`, error)
+          this.isReconnecting = false
+          this.connectPromise = null
           this.emit('error', error)
           reject(error)
         }
 
         this.connection.onclose = (event) => {
-          console.log('RouterOS WebSocket fechado:', event.code, event.reason)
+          clearTimeout(connectionTimeout)
+          this.stopHeartbeat()
+          console.log(`[WebSocket] 🔌 Fechado (router ${routerId}): código=${event.code}, motivo="${event.reason || 'sem motivo'}"`)
+          this.isReconnecting = false
+          
+          // Rejeitar promise de conexão pendente
+          if (this.connectPromise) {
+            reject(new Error(`Conexão fechada: ${event.reason || 'sem motivo'} (código ${event.code})`))
+            this.connectPromise = null
+          }
+          
+          // Limpar requisições pendentes
+          this.pendingRequests.forEach(({ reject: reqReject, timeoutId }) => {
+            clearTimeout(timeoutId)
+            reqReject(new Error('WebSocket desconectado'))
+          })
+          this.pendingRequests.clear()
+          
+          // Limpar referência da conexão
+          this.connection = null
+          
           this.emit('disconnected', event)
           
           // Tentar reconectar se não foi fechado intencionalmente e temos routerId
-          if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts && this.currentRouterId) {
+          if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts && this.currentRouterId && !this.isReconnecting) {
             this.reconnectAttempts++
-            const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1)
-            console.log(`Tentando reconectar em ${delay}ms... (tentativa ${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+            const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000) // Max 30s
+            console.log(`[WebSocket] 🔄 Tentando reconectar em ${delay}ms... (tentativa ${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
             setTimeout(() => {
-              if (this.currentRouterId) {
-                this.connect(this.currentRouterId).catch(console.error)
+              if (this.currentRouterId && !this.isReconnecting) {
+                this.connect(this.currentRouterId, true).catch(err => {
+                  console.error(`[WebSocket] Erro ao reconectar:`, err)
+                })
               }
             }, delay)
           } else if (!this.currentRouterId) {
-            console.warn('Não é possível reconectar: routerId não disponível')
+            console.warn('[WebSocket] ⚠️ Não é possível reconectar: routerId não disponível')
+          } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            console.error(`[WebSocket] ❌ Máximo de tentativas de reconexão atingido (${this.maxReconnectAttempts})`)
+            this.emit('maxReconnectAttemptsReached')
           }
         }
       } catch (error) {
+        clearTimeout(connectionTimeout)
+        this.isReconnecting = false
+        this.connectPromise = null
         reject(error)
       }
     })
+
+    return this.connectPromise
+  }
+
+  /**
+   * Inicia heartbeat para verificar saúde da conexão
+   */
+  startHeartbeat() {
+    this.stopHeartbeat()
+    this.heartbeatInterval = setInterval(() => {
+      if (this.connection?.readyState === WebSocket.OPEN) {
+        // Verificar se recebeu pong recentemente (dentro de 2x o intervalo)
+        if (this.lastPongTime && (Date.now() - this.lastPongTime) > (this.heartbeatIntervalMs * 2)) {
+          console.warn('[WebSocket] ⚠️ Heartbeat timeout - conexão pode estar morta, forçando reconexão...')
+          this.forceDisconnect()
+          this.reconnectAttempts = 0 // Resetar tentativas para reconexão forçada
+          if (this.currentRouterId) {
+            this.connect(this.currentRouterId, true).catch(console.error)
+          }
+          return
+        }
+        
+        // Enviar ping (usando get_status como ping) - sem retry para não sobrecarregar
+        try {
+          // Usar send direto sem retry para heartbeat
+          const id = ++this.messageId
+          const request = {
+            action: 'get_status',
+            router_id: this.currentRouterId,
+            router_ip: null,
+            id
+          }
+          
+          const heartbeatTimeout = setTimeout(() => {
+            this.pendingRequests.delete(id)
+            console.warn('[WebSocket] ⚠️ Heartbeat timeout - sem resposta')
+            // Não forçar desconexão imediatamente, apenas marcar como sem resposta
+          }, 5000)
+          
+          this.pendingRequests.set(id, {
+            resolve: () => {
+              clearTimeout(heartbeatTimeout)
+              this.lastPongTime = Date.now()
+            },
+            reject: () => {
+              clearTimeout(heartbeatTimeout)
+              console.warn('[WebSocket] ⚠️ Heartbeat falhou')
+            },
+            timeoutId: heartbeatTimeout
+          })
+          
+          if (this.connection.readyState === WebSocket.OPEN) {
+            this.connection.send(JSON.stringify(request))
+          }
+        } catch (err) {
+          console.warn('[WebSocket] ⚠️ Erro ao enviar heartbeat:', err)
+          // Se erro ao enviar, conexão pode estar morta
+          this.forceDisconnect()
+          if (this.currentRouterId) {
+            this.reconnectAttempts = 0
+            this.connect(this.currentRouterId, true).catch(console.error)
+          }
+        }
+      } else {
+        // Conexão não está aberta - parar heartbeat
+        this.stopHeartbeat()
+      }
+    }, this.heartbeatIntervalMs)
+  }
+
+  /**
+   * Para o heartbeat
+   */
+  stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval)
+      this.heartbeatInterval = null
+    }
   }
 
   /**
    * Desconecta do WebSocket
    */
   async disconnect() {
+    this.stopHeartbeat()
     if (this.connection) {
-      this.connection.close(1000, 'Desconexão solicitada')
+      try {
+        this.connection.close(1000, 'Desconexão solicitada')
+      } catch (e) {
+        console.warn('[WebSocket] Erro ao fechar conexão:', e)
+      }
       this.connection = null
       this.currentRouterId = null
       this.pendingRequests.clear()
-      this.listeners.clear()
+      this.connectPromise = null
+      this.isReconnecting = false
+      this.reconnectAttempts = 0
     }
   }
 
@@ -185,37 +351,161 @@ class RouterOsWebSocketService {
   }
 
   /**
+   * Força fechamento e limpeza da conexão
+   */
+  forceDisconnect() {
+    console.log('[WebSocket] 🔄 Forçando desconexão e limpeza...')
+    this.stopHeartbeat()
+    
+    // Limpar requisições pendentes
+    this.pendingRequests.forEach(({ reject: reqReject, timeoutId }) => {
+      clearTimeout(timeoutId)
+      reqReject(new Error('Conexão forçada a fechar'))
+    })
+    this.pendingRequests.clear()
+    
+    // Fechar conexão se existir
+    if (this.connection) {
+      try {
+        // Remover listeners para evitar loops
+        this.connection.onopen = null
+        this.connection.onmessage = null
+        this.connection.onerror = null
+        this.connection.onclose = null
+        
+        // Fechar conexão
+        if (this.connection.readyState === WebSocket.OPEN || this.connection.readyState === WebSocket.CONNECTING) {
+          this.connection.close(1006, 'Conexão forçada a fechar')
+        }
+      } catch (e) {
+        console.warn('[WebSocket] Erro ao forçar fechamento:', e)
+      }
+      this.connection = null
+    }
+    
+    // Resetar estado
+    this.connectPromise = null
+    this.isReconnecting = false
+    // NÃO resetar reconnectAttempts aqui - deixar para o próximo connect()
+  }
+
+  /**
    * Envia uma mensagem e aguarda resposta
    * @param {object} message - Mensagem a ser enviada
    * @param {number} timeout - Timeout em milissegundos (padrão: 30000)
+   * @param {number} maxRetries - Número máximo de tentativas (padrão: 1)
    */
-  async send(message, timeout = 30000) {
-    if (!this.connection || this.connection.readyState !== WebSocket.OPEN) {
-      throw new Error('WebSocket não está conectado')
-    }
-
-    return new Promise((resolve, reject) => {
-      const id = ++this.messageId
-      const request = { ...message, id }
-
-      // Configurar timeout
-      const timeoutId = setTimeout(() => {
-        this.pendingRequests.delete(id)
-        reject(new Error('Timeout ao aguardar resposta'))
-      }, timeout)
-
-      // Armazenar callback
-      this.pendingRequests.set(id, { resolve, reject, timeoutId })
-
-      // Enviar mensagem
+  async send(message, timeout = 30000, maxRetries = 1) {
+    let lastError = null
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        this.connection.send(JSON.stringify(request))
+        // Verificar se está conectado
+        if (!this.connection || this.connection.readyState !== WebSocket.OPEN) {
+          // Tentar reconectar se tiver routerId
+          if (this.currentRouterId && !this.isReconnecting) {
+            console.log(`[WebSocket] ⚠️ Não conectado, tentando reconectar... (tentativa ${attempt + 1}/${maxRetries + 1})`)
+            try {
+              // Forçar limpeza antes de reconectar
+              this.forceDisconnect()
+              await this.connect(this.currentRouterId, true)
+              // Aguardar um pouco para estabilizar
+              await new Promise(resolve => setTimeout(resolve, 200))
+            } catch (connectError) {
+              throw new Error(`Falha ao reconectar: ${connectError.message}`)
+            }
+          } else {
+            throw new Error(`WebSocket não está conectado (estado: ${this.connection?.readyState || 'null'})`)
+          }
+        }
+
+        return await new Promise((resolve, reject) => {
+          const id = ++this.messageId
+          const request = { ...message, id }
+
+          // Configurar timeout
+          const timeoutId = setTimeout(() => {
+            this.pendingRequests.delete(id)
+            const error = new Error(`Timeout ao aguardar resposta após ${timeout}ms`)
+            error.code = 'TIMEOUT'
+            
+            // Se foi timeout, a conexão pode estar "morta" - forçar reconexão
+            console.warn(`[WebSocket] ⚠️ Timeout na mensagem ${id} (${message.action || 'unknown'}) - conexão pode estar morta`)
+            
+            // Se não for o último attempt, não forçar desconexão ainda
+            if (attempt < maxRetries) {
+              reject(error)
+            } else {
+              // Último attempt falhou com timeout - conexão provavelmente está morta
+              console.warn(`[WebSocket] 🔄 Timeout no último attempt - forçando reconexão`)
+              this.forceDisconnect()
+              reject(error)
+            }
+          }, timeout)
+
+          // Armazenar callback
+          this.pendingRequests.set(id, { resolve, reject, timeoutId })
+
+          // Enviar mensagem
+          try {
+            if (this.connection.readyState !== WebSocket.OPEN) {
+              clearTimeout(timeoutId)
+              this.pendingRequests.delete(id)
+              reject(new Error('Conexão fechada durante envio'))
+              return
+            }
+            
+            this.connection.send(JSON.stringify(request))
+            console.log(`[WebSocket] 📤 Enviado: ${message.action || 'unknown'} (id: ${id})`)
+          } catch (error) {
+            clearTimeout(timeoutId)
+            this.pendingRequests.delete(id)
+            // Erro ao enviar - conexão provavelmente está morta
+            console.error(`[WebSocket] ❌ Erro ao enviar mensagem ${id}:`, error)
+            this.forceDisconnect()
+            reject(new Error(`Erro ao enviar mensagem: ${error.message}`))
+          }
+        })
       } catch (error) {
-        clearTimeout(timeoutId)
-        this.pendingRequests.delete(id)
-        reject(error)
+        lastError = error
+        
+        // Se foi timeout e não é o último attempt, aguardar antes de tentar novamente
+        if (error.code === 'TIMEOUT' && attempt < maxRetries) {
+          console.warn(`[WebSocket] ⚠️ Timeout (tentativa ${attempt + 1}/${maxRetries + 1}) - aguardando antes de retry...`)
+          const delay = Math.min(1000 * Math.pow(2, attempt), 3000) // Backoff exponencial, max 3s
+          await new Promise(resolve => setTimeout(resolve, delay))
+          
+          // Tentar reconectar antes do próximo attempt
+          if (this.currentRouterId && !this.isReconnecting) {
+            try {
+              console.log(`[WebSocket] 🔄 Reconectando após timeout...`)
+              this.forceDisconnect()
+              await this.connect(this.currentRouterId, true)
+              await new Promise(resolve => setTimeout(resolve, 200))
+            } catch (connectError) {
+              console.error(`[WebSocket] ❌ Erro ao reconectar após timeout:`, connectError)
+            }
+          }
+        } else if (error.code !== 'TIMEOUT') {
+          console.warn(`[WebSocket] ⚠️ Erro ao enviar mensagem (tentativa ${attempt + 1}/${maxRetries + 1}):`, error.message)
+          
+          // Se não for o último attempt, aguardar antes de tentar novamente
+          if (attempt < maxRetries) {
+            const delay = Math.min(1000 * Math.pow(2, attempt), 5000) // Backoff exponencial, max 5s
+            await new Promise(resolve => setTimeout(resolve, delay))
+          }
+        }
       }
-    })
+    }
+    
+    // Se chegou aqui, todas as tentativas falharam
+    // Se foi timeout, forçar reconexão para próxima vez
+    if (lastError?.code === 'TIMEOUT') {
+      console.error(`[WebSocket] ❌ Todas as tentativas falharam com timeout - forçando reconexão`)
+      this.forceDisconnect()
+    }
+    
+    throw lastError || new Error('Falha ao enviar mensagem após todas as tentativas')
   }
 
   /**
@@ -287,7 +577,7 @@ class RouterOsWebSocketService {
       action: 'get_status',
       router_id: routerId,
       router_ip: routerIp
-    })
+    }, 10000, 0) // Timeout de 10s, sem retry (para não sobrecarregar)
   }
 
   /**
@@ -314,7 +604,7 @@ class RouterOsWebSocketService {
       username,
       password,
       command
-    })
+    }, 60000, 1) // Timeout de 60s, 1 retry (comandos podem demorar)
   }
 
   /**
