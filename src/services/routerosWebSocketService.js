@@ -70,7 +70,7 @@ class RouterOsWebSocketService {
       try {
         this.connection.close()
       } catch (e) {
-        console.warn('Erro ao fechar conexão existente:', e)
+        // Ignorar erro ao fechar conexão existente
       }
       this.connection = null
     }
@@ -92,12 +92,10 @@ class RouterOsWebSocketService {
       }, this.connectionTimeout)
 
       try {
-        console.log(`[WebSocket] Conectando ao router ${routerId}...`)
         this.connection = new WebSocket(wsUrl)
 
         this.connection.onopen = () => {
           clearTimeout(connectionTimeout)
-          console.log(`[WebSocket] ✅ Conectado ao router ${routerId}`)
           this.currentRouterId = routerId
           this.reconnectAttempts = 0
           this.isReconnecting = false
@@ -196,7 +194,6 @@ class RouterOsWebSocketService {
         this.connection.onclose = (event) => {
           clearTimeout(connectionTimeout)
           this.stopHeartbeat()
-          console.log(`[WebSocket] 🔌 Fechado (router ${routerId}): código=${event.code}, motivo="${event.reason || 'sem motivo'}"`)
           this.isReconnecting = false
           
           // Rejeitar promise de conexão pendente
@@ -221,7 +218,6 @@ class RouterOsWebSocketService {
           if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts && this.currentRouterId && !this.isReconnecting) {
             this.reconnectAttempts++
             const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000) // Max 30s
-            console.log(`[WebSocket] 🔄 Tentando reconectar em ${delay}ms... (tentativa ${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
             setTimeout(() => {
               if (this.currentRouterId && !this.isReconnecting) {
                 this.connect(this.currentRouterId, true).catch(err => {
@@ -229,10 +225,8 @@ class RouterOsWebSocketService {
                 })
               }
             }, delay)
-          } else if (!this.currentRouterId) {
-            console.warn('[WebSocket] ⚠️ Não é possível reconectar: routerId não disponível')
           } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.error(`[WebSocket] ❌ Máximo de tentativas de reconexão atingido (${this.maxReconnectAttempts})`)
+            console.error(`[WebSocket] Máximo de tentativas de reconexão atingido (${this.maxReconnectAttempts})`)
             this.emit('maxReconnectAttemptsReached')
           }
         }
@@ -278,7 +272,6 @@ class RouterOsWebSocketService {
           
           const heartbeatTimeout = setTimeout(() => {
             this.pendingRequests.delete(id)
-            console.warn('[WebSocket] ⚠️ Heartbeat timeout - sem resposta')
             // Não forçar desconexão imediatamente, apenas marcar como sem resposta
           }, 5000)
           
@@ -289,7 +282,6 @@ class RouterOsWebSocketService {
             },
             reject: () => {
               clearTimeout(heartbeatTimeout)
-              console.warn('[WebSocket] ⚠️ Heartbeat falhou')
             },
             timeoutId: heartbeatTimeout
           })
@@ -298,7 +290,6 @@ class RouterOsWebSocketService {
             this.connection.send(JSON.stringify(request))
           }
         } catch (err) {
-          console.warn('[WebSocket] ⚠️ Erro ao enviar heartbeat:', err)
           // Se erro ao enviar, conexão pode estar morta
           this.forceDisconnect()
           if (this.currentRouterId) {
@@ -354,7 +345,6 @@ class RouterOsWebSocketService {
    * Força fechamento e limpeza da conexão
    */
   forceDisconnect() {
-    console.log('[WebSocket] 🔄 Forçando desconexão e limpeza...')
     this.stopHeartbeat()
     
     // Limpar requisições pendentes
@@ -378,7 +368,7 @@ class RouterOsWebSocketService {
           this.connection.close(1006, 'Conexão forçada a fechar')
         }
       } catch (e) {
-        console.warn('[WebSocket] Erro ao forçar fechamento:', e)
+        // Ignorar erro ao forçar fechamento
       }
       this.connection = null
     }
@@ -404,7 +394,6 @@ class RouterOsWebSocketService {
         if (!this.connection || this.connection.readyState !== WebSocket.OPEN) {
           // Tentar reconectar se tiver routerId
           if (this.currentRouterId && !this.isReconnecting) {
-            console.log(`[WebSocket] ⚠️ Não conectado, tentando reconectar... (tentativa ${attempt + 1}/${maxRetries + 1})`)
             try {
               // Forçar limpeza antes de reconectar
               this.forceDisconnect()
@@ -429,15 +418,11 @@ class RouterOsWebSocketService {
             const error = new Error(`Timeout ao aguardar resposta após ${timeout}ms`)
             error.code = 'TIMEOUT'
             
-            // Se foi timeout, a conexão pode estar "morta" - forçar reconexão
-            console.warn(`[WebSocket] ⚠️ Timeout na mensagem ${id} (${message.action || 'unknown'}) - conexão pode estar morta`)
-            
             // Se não for o último attempt, não forçar desconexão ainda
             if (attempt < maxRetries) {
               reject(error)
             } else {
               // Último attempt falhou com timeout - conexão provavelmente está morta
-              console.warn(`[WebSocket] 🔄 Timeout no último attempt - forçando reconexão`)
               this.forceDisconnect()
               reject(error)
             }
@@ -456,12 +441,11 @@ class RouterOsWebSocketService {
             }
             
             this.connection.send(JSON.stringify(request))
-            console.log(`[WebSocket] 📤 Enviado: ${message.action || 'unknown'} (id: ${id})`)
           } catch (error) {
             clearTimeout(timeoutId)
             this.pendingRequests.delete(id)
             // Erro ao enviar - conexão provavelmente está morta
-            console.error(`[WebSocket] ❌ Erro ao enviar mensagem ${id}:`, error)
+            console.error(`[WebSocket] Erro ao enviar mensagem:`, error)
             this.forceDisconnect()
             reject(new Error(`Erro ao enviar mensagem: ${error.message}`))
           }
@@ -501,7 +485,6 @@ class RouterOsWebSocketService {
     // Se chegou aqui, todas as tentativas falharam
     // Se foi timeout, forçar reconexão para próxima vez
     if (lastError?.code === 'TIMEOUT') {
-      console.error(`[WebSocket] ❌ Todas as tentativas falharam com timeout - forçando reconexão`)
       this.forceDisconnect()
     }
     

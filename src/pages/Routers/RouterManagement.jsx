@@ -130,7 +130,7 @@ export default function RouterManagement() {
       
       // O backend retorna router_ip na resposta quando busca do peer WireGuard
       const finalRouterIp = status.router_ip || routerIp
-      console.log('Status recebido:', { 
+      // Status recebido 
         connected: status.connected, 
         router_ip: status.router_ip, 
         routerIp_inicial: routerIp,
@@ -178,13 +178,12 @@ export default function RouterManagement() {
     
     // Verificar se WebSocket está conectado antes de tentar
     if (!routerOsWebSocketService.isConnected()) {
-      console.warn('[RouterManagement] WebSocket não conectado, pulando atualização de status')
       // Tentar reconectar se tiver routerId
       if (routerId && !routerOsWebSocketService.getState().includes('CONNECTING')) {
         try {
           await routerOsWebSocketService.connect(routerId)
         } catch (err) {
-          console.warn('[RouterManagement] Erro ao tentar reconectar:', err)
+          // Ignorar erro silenciosamente
         }
       }
       return
@@ -224,9 +223,7 @@ export default function RouterManagement() {
       }
     } catch (err) {
       // Silenciar erros durante atualizações automáticas para não poluir a UI
-      // Mas logar para diagnóstico
       if (err.message?.includes('WebSocket não está conectado') || err.message?.includes('Timeout')) {
-        console.warn('[RouterManagement] WebSocket desconectado ou timeout durante atualização de status:', err.message)
         // Atualizar status de conexão
         setConnectionStatus(prev => ({
           ...prev,
@@ -236,16 +233,13 @@ export default function RouterManagement() {
         
         // Tentar reconectar se foi timeout
         if (err.message?.includes('Timeout') && routerId) {
-          console.log('[RouterManagement] Tentando reconectar após timeout...')
           try {
             routerOsWebSocketService.forceDisconnect()
             await routerOsWebSocketService.connect(routerId, true)
           } catch (reconnectErr) {
-            console.warn('[RouterManagement] Erro ao reconectar:', reconnectErr)
+            // Ignorar erro silenciosamente
           }
         }
-      } else {
-        console.warn('[RouterManagement] Erro ao atualizar status do sistema:', err.message || err)
       }
     }
   }, [connectionStatus?.connected, connectionStatus?.routerIp, router, routerId])
@@ -340,7 +334,7 @@ export default function RouterManagement() {
       if (showLoading) {
         setError(err.message || 'Erro ao carregar dados')
       } else {
-        console.warn('Erro ao atualizar dados da aba:', err)
+        // Erro ao atualizar dados da aba (silencioso)
       }
     } finally {
       if (showLoading) {
